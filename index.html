@@ -19,7 +19,10 @@
             <p>Statistiques exactes avec moteur Project-GC & Fonctionnalités Premium Débloquées</p>
         </div>
         <div style="display:flex; gap:15px; align-items:center;">
+            
 
+            <button class="btn-clear" onclick="toggleDarkMode()" style="background: #475569;">🌙</button>
+            
             <label style="font-weight:bold; color:#1e40af; display:flex; align-items:center; gap:8px; cursor:pointer; background:#dbeafe; padding:8px 15px; border-radius:8px; border:1px solid #bfdbfe;">
                 <input type="checkbox" id="togglePrevisionnel" style="width:18px; height:18px; cursor:pointer;"> 🔮 Mode Prévisionnel
             </label>
@@ -95,7 +98,9 @@
                 
                 <p id="draftStatus" style="font-size: 11px; margin-top: 5px; margin-bottom: 0; color: #64748b; font-weight: bold; text-align: center;"></p>
             </div>
-            
+
+                    
+
         </div>
     </div>
             
@@ -144,10 +149,10 @@
                 </div>
             </div>
             
-            <!-- NOUVEL EMPLACEMENT DU CURSEUR (Se cachera avec la carte) -->
-            <div style="display:flex; align-items:center; gap: 15px; margin-bottom: 15px; background: #f8fafc; padding: 12px 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
-                <label style="font-size: 14px; color: var(--text-main); font-weight: bold;">🎯 Objectif : <strong id="target360Val" style="color: var(--primary-dark); font-size: 16px;">1</strong> / 5 caches par secteur</label>
-                <input type="range" id="target360Slider" min="1" max="5" value="1" oninput="update360Target();" style="cursor:pointer; flex: 1; max-width: 250px;">
+            <!-- NOUVEL EMPLACEMENT DU CURSEUR (Max 15) -->
+            <div style="display:flex; align-items:center; gap: 15px; margin-bottom: 15px; background: var(--bg); padding: 12px 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <label style="font-size: 14px; color: var(--text-main); font-weight: bold;">🎯 Objectif : <strong id="target360Val" style="color: var(--primary-dark); font-size: 16px;">1</strong> / 15 caches par secteur</label>
+                <input type="range" id="target360Slider" min="1" max="15" value="1" oninput="update360Target();" style="cursor:pointer; flex: 1; max-width: 250px;">
             </div>
 
             <div id="tab360-resume">
@@ -156,7 +161,7 @@
                     <div class="chart-360-wrapper"><canvas id="chart360"></canvas></div>
                     <div class="stats-360">
                         <div class="stat-360-box"><strong>Secteurs complétés :</strong> <span id="s360Completed" style="color:var(--primary-dark);">0</span> <span id="badge360Resume" class="card-badge" style="float:right;">0/360</span></div>                        <div class="stat-360-box"><strong>Secteurs manquants :</strong> <span id="s360Missing" style="color:#ef4444;">0</span></div>
-                        <div class="stat-360-box"><strong>Max de caches (capé à 5) :</strong> <span id="s360Max">0</span></div>
+                        <div class="stat-360-box"><strong>Max de caches (capé à 15) :</strong> <span id="s360Max">0</span></div>
                         <h4 style="margin-top:20px; color:var(--text-main); font-weight:800;">Secteurs Manquants (Azimut)</h4>
                         <div id="missingSectorsList" class="missing-sectors-list"></div>
                     </div>
@@ -167,8 +172,7 @@
                     <thead><tr>
                         <th onclick="sortTable360(0)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">Azimut ⬍</th>
                         <th onclick="sortTable360(1)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">#Trouvées ⬍</th>
-                        <th style="text-align:left; background:var(--bg); position:sticky; top:0;">Caches trouvées (Max 5)</th>
-                    </tr></thead>
+                        <th style="text-align:left; background:var(--bg); position:sticky; top:0;">Caches trouvées (Max 15)</th>
                     <tbody id="tbody360"></tbody>
                 </table>
             </div>
@@ -193,10 +197,12 @@
                 <h3>🏆 Exploits & Paliers</h3>
                 <div class="tabs" onclick="event.stopPropagation()">
                     <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
+                    <button class="tab-btn" onclick="switchExploitsTab('missedFtf')">🕵️ FTF Oubliés <span id="badgeMissedFtf" class="card-badge" style="margin-left:5px; background:#fecaca; color:#b91c1c;">0</span></button>
                     <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
                 </div>
             </div>
             
+            <!-- ONGLET 1 : FTF DECLARES -->
             <div id="tabContent-ftf">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
                     <p class="note" style="margin:0;">Détectés grâce aux tags {*FTF*}, {FTF} ou [FTF] dans vos logs.</p>
@@ -210,6 +216,20 @@
                 </div>
             </div>
 
+            <!-- ONGLET 2 : FTF OUBLIÉS (LE NOUVEAU) -->
+            <div id="tabContent-missedFtf" style="display:none;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <p class="note" style="margin:0;">Caches où vous êtes le TOUT PREMIER logueur (hors Reviewer), mais sans tag FTF.</p>
+                </div>
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="annual-table" id="missedFtfTable">
+                        <thead><tr><th style="position:sticky; top:0; background:var(--bg);">Date</th><th style="position:sticky; top:0; background:var(--bg);">Code GC</th><th style="position:sticky; top:0; background:var(--bg);">Nom de la cache</th></tr></thead>
+                        <tbody id="missedFtfTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- ONGLET 3 : PALIERS -->
             <div id="tabContent-milestones" style="display:none;">
                 <div class="milestones-list" id="milestonesList"></div>
             </div>
