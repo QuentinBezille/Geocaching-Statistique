@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Geocaching Master Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-top">
+        <div class="header-title">
+            <h1>🧭 Dashboard Geocaching Master Pro</h1>
+            <p>Statistiques exactes avec moteur Project-GC & Fonctionnalités Premium Débloquées</p>
+        </div>
+        <div style="display:flex; gap:15px; align-items:center;">
+
+            <label style="font-weight:bold; color:#1e40af; display:flex; align-items:center; gap:8px; cursor:pointer; background:#dbeafe; padding:8px 15px; border-radius:8px; border:1px solid #bfdbfe;">
+                <input type="checkbox" id="togglePrevisionnel" style="width:18px; height:18px; cursor:pointer;"> 🔮 Mode Prévisionnel
+            </label>
+            <button class="btn-clear" onclick="viderMemoire()">🗑️ Vider les données</button>
+        </div>
+    </div>
+
+    <div class="control-panel">
+        
+        <!-- Panneau de gauche : Réglages -->
+        <div class="settings-box">
+            
+            <!-- BLOC PSEUDO -->
+            <div class="input-group">
+                <label>🕵️‍♂️ Pseudo (Filtre) :</label>
+                <input type="text" id="username" placeholder="Entrez votre pseudo exact">
+            </div>
+            
+            <!-- BLOC COORDONNÉES DOMICILE -->
+            <div class="input-group">
+                <label>📍 Coordonnées du Domicile :</label>
+                <div class="input-row">
+                    <input type="text" id="homeCoords" placeholder="Ex: N 48° 01.000 E 002° 01.000">
+                    <button id="btnToggleMap" class="btn-map" style="margin: 0; padding: 8px 12px; background: #3b82f6;">🗺️ Choisir</button>
+                </div>
+                <div class="setting-note">* Coordonnées requises pour le Challenge 360°</div>
+            </div>
+            
+            <!-- CARTE (Cachée par défaut) -->
+            <div id="mapContainer" style="display:none; height: 250px; width: 100%; border-radius: 8px; z-index: 1;"></div>
+            
+        </div>
+
+        <!-- Panneau de droite : Uploads -->
+        <div class="upload-section">
+            
+            <!-- BOÎTE 1 : DONNÉES PRINCIPALES (Caches + Labs) -->
+            <div class="upload-box" style="display: flex; flex-direction: column; justify-content: flex-start;">
+                <h3>1. DONNÉES PRINCIPALES</h3>
+                
+                <!-- Ligne GPX -->
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <div class="upload-btn" onclick="document.getElementById('gpxInput').click()" id="gpxBtn" style="flex:1; margin:0; padding: 15px;">📁 Caches (.gpx)</div>
+                    <button class="btn-clear-small" onclick="clearSpecific('gpx')" title="Vider uniquement le GPX Principal">🗑️</button>
+                </div>
+                <input type="file" id="gpxInput" style="display:none" accept=".gpx">
+                
+                <!-- Ligne Labs -->
+                <div style="display: flex; gap: 8px;">
+                    <div class="upload-btn" onclick="document.getElementById('csvInput').click()" id="csvBtn" style="flex:1; margin:0; padding: 15px;">📁 Labs (.txt)</div>
+                    <button class="btn-clear-small" onclick="clearSpecific('labs')" title="Vider uniquement les Labs">🗑️</button>
+                </div>
+                <input type="file" id="csvInput" style="display:none" accept=".csv, .txt">
+            </div>
+            
+            <!-- BOÎTE 2 : BROUILLONS (Fusion) -->
+            <div class="upload-box" style="border: 2px dashed #3b82f6; display: flex; flex-direction: column; justify-content: flex-start;">
+                <h3 style="color:#2563eb;">2. BROUILLONS (FUSION)</h3>
+                
+                <!-- Ligne TXT -->
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <div class="upload-btn" onclick="document.getElementById('draftTxtInput').click()" id="draftTxtBtn" style="flex:1; margin:0; padding: 15px; border-color:#8b5cf6; color:#7c3aed; background:#f5f3ff;">📄 1. Charger le .txt de tes brouillons</div>
+                    <button class="btn-clear-small" onclick="clearSpecific('draftTxt')" title="Vider le fichier TXT des brouillons">🗑️</button>
+                </div>
+                <input type="file" id="draftTxtInput" style="display:none" accept=".txt">
+                
+                <!-- Ligne GPX Brouillons -->
+                <div style="display: flex; gap: 8px;">
+                    <div class="upload-btn" onclick="document.getElementById('draftInput').click()" id="draftBtn" style="flex:1; margin:0; padding: 15px; border-color:#3b82f6; color:#2563eb; background:#eff6ff;">📁 2. Charger le .gpx de ta liste brouillon</div>
+                    <button class="btn-clear-small" onclick="clearSpecific('draftGpx')" title="Vider le fichier GPX des brouillons">🗑️</button>
+                </div>
+                <input type="file" id="draftInput" style="display:none" accept=".gpx">
+                
+                <p id="draftStatus" style="font-size: 11px; margin-top: 5px; margin-bottom: 0; color: #64748b; font-weight: bold; text-align: center;"></p>
+            </div>
+            
+        </div>
+    </div>
+            
+
+    <div class="dashboard" id="dashboard">
+        
+        <div class="summary-card">
+            <div class="summary-text" id="summaryText"></div>
+            <div class="search-bar">
+                <label>Chercher un jour :</label>
+                <input type="date" id="searchDate">
+                <button onclick="rechercherJour()">🔎 Voir</button>
+            </div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi-card"><h4>📦 Total des Caches</h4><div class="value" id="kpiTotal">0</div><div class="sub-text"><span id="kpiPhysiques">0</span> physiques | <span id="kpiLabs">0</span> labs</div></div>
+            <div class="kpi-card"><h4>🥇 Total FTF</h4><div class="value" id="kpiFtf">0</div><div class="sub-text">First To Find</div></div>
+            <div class="kpi-card"><h4>📈 Taux de découverte</h4><div class="value" id="kpiRate">0</div><div class="sub-text">caches / jour</div></div>
+            <div class="kpi-card"><h4>🔥 Plus grande série</h4><div class="value" id="kpiMaxStreak">0</div><div class="sub-text" id="kpiMaxStreakStr">-</div></div>
+            <div class="kpi-card"><h4>💤 Période creuse</h4><div class="value" id="kpiSlump">0</div><div class="sub-text" id="kpiSlumpStr">-</div></div>
+            <div class="kpi-card"><h4>⚡ Série / Inactivité</h4><div class="value" id="kpiCurrent">0</div><div class="sub-text" id="kpiCurrentStr">-</div></div>
+            <div class="kpi-card"><h4>👑 Meilleure journée</h4><div class="value" id="kpiBestDay">0</div><div class="sub-text" id="kpiBestDayDate">-</div></div>
+            <div class="kpi-card"><h4>🌟 Meilleur mois</h4><div class="value" id="kpiBestMonth">0</div><div class="sub-text" id="kpiBestMonthDate">-</div></div>
+            <div class="kpi-card"><h4>🏆 Meilleure année</h4><div class="value" id="kpiBestYear">0</div><div class="sub-text" id="kpiBestYearDate">-</div></div>
+        </div>
+
+        <div class="card card-full" id="calendar-container">
+            <div class="card-header">
+                <h3>📅 Agenda des découvertes</h3>
+            </div>
+            <div id="calendar"></div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card card-full">
+            <div class="card-header">
+                <h3>🧭 Challenge 360 Degrés (Premium)</h3>
+                <div style="display: flex; align-items: center; gap: 15px; margin-left: auto;" onclick="event.stopPropagation()">
+                    <div class="card-badge" id="badge360">0/360 Secteurs</div>
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switch360Tab('resume')">Radar Polaire</button>
+                        <button class="tab-btn" onclick="switch360Tab('table')">Table</button>
+                        <button class="tab-btn" onclick="switch360Tab('carte')">Carte Sectorielle</button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- NOUVEL EMPLACEMENT DU CURSEUR (Se cachera avec la carte) -->
+            <div style="display:flex; align-items:center; gap: 15px; margin-bottom: 15px; background: #f8fafc; padding: 12px 20px; border-radius: 8px; border: 1px solid #e2e8f0;">
+                <label style="font-size: 14px; color: var(--text-main); font-weight: bold;">🎯 Objectif : <strong id="target360Val" style="color: var(--primary-dark); font-size: 16px;">1</strong> / 5 caches par secteur</label>
+                <input type="range" id="target360Slider" min="1" max="5" value="1" oninput="update360Target();" style="cursor:pointer; flex: 1; max-width: 250px;">
+            </div>
+
+            <div id="tab360-resume">
+                <p class="note" style="margin-top: 0;">Généré à partir de votre Domicile. Maximum 5 caches récupérées par secteur.</p>
+                <div class="layout-360">
+                    <div class="chart-360-wrapper"><canvas id="chart360"></canvas></div>
+                    <div class="stats-360">
+                        <div class="stat-360-box"><strong>Secteurs complétés :</strong> <span id="s360Completed" style="color:var(--primary-dark);">0</span> <span id="badge360Resume" class="card-badge" style="float:right;">0/360</span></div>                        <div class="stat-360-box"><strong>Secteurs manquants :</strong> <span id="s360Missing" style="color:#ef4444;">0</span></div>
+                        <div class="stat-360-box"><strong>Max de caches (capé à 5) :</strong> <span id="s360Max">0</span></div>
+                        <h4 style="margin-top:20px; color:var(--text-main); font-weight:800;">Secteurs Manquants (Azimut)</h4>
+                        <div id="missingSectorsList" class="missing-sectors-list"></div>
+                    </div>
+                </div>
+            </div>
+            <div id="tab360-table" style="display:none; max-height: 400px; overflow-y: auto; margin-top: 15px;">
+                <table class="annual-table" id="table360">
+                    <thead><tr>
+                        <th onclick="sortTable360(0)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">Azimut ⬍</th>
+                        <th onclick="sortTable360(1)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">#Trouvées ⬍</th>
+                        <th style="text-align:left; background:var(--bg); position:sticky; top:0;">Caches trouvées (Max 5)</th>
+                    </tr></thead>
+                    <tbody id="tbody360"></tbody>
+                </table>
+            </div>
+            <div id="tab360-carte" style="display:none; position:relative; height: 500px; width: 100%; border-radius: 8px; margin-top: 15px; border: 2px solid #e2e8f0; z-index: 1; overflow: hidden;">
+                <div id="mapPremiumControls" style="position:absolute; top:10px; right:10px; z-index:1000; background:rgba(255,255,255,0.95); padding:12px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.2); border: 1px solid #cbd5e1; width: 150px; box-sizing: border-box;">
+                    <div style="margin-bottom: 8px;">
+                        <label style="font-weight:bold; font-size:12px; color:#1e293b; display:block;">Secteur affiché (°):</label>
+                        <input type="number" id="mapSectorSelector" min="0" max="359" value="0" style="width: 100px; padding:5px; border-radius:4px; border:1px solid #cbd5e1;" oninput="updateMapPremium()">
+                    </div>
+                    <div style="border-top: 1px solid #e2e8f0; padding-top: 5px;">
+                        <label style="font-size: 12px; font-weight: bold; color: #1e293b; cursor: pointer;">
+                            <input type="checkbox" id="showAllSectors" onchange="updateMapPremium()" style="margin-right: 5px;"> Tout voir (360°)
+                        </label>
+                    </div>
+                    <div id="zoomWarning" style="color:#ef4444; font-size:11px; margin-top:5px; display:none; font-weight:bold;">⚠️ Zoom min 10 requis</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>🏆 Exploits & Paliers</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
+                    <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
+                </div>
+            </div>
+            
+            <div id="tabContent-ftf">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <p class="note" style="margin:0;">Détectés grâce aux tags {*FTF*}, {FTF} ou [FTF] dans vos logs.</p>
+                    <div class="card-badge" id="ftfBadgeTotal" style="margin: 0;">0 FTF</div>
+                </div>
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="annual-table" id="ftfTable">
+                        <thead><tr><th style="position:sticky; top:0; background:var(--bg);">Date</th><th style="position:sticky; top:0; background:var(--bg);">Code GC</th><th style="position:sticky; top:0; background:var(--bg);">Nom de la cache</th></tr></thead>
+                        <tbody id="ftfTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="tabContent-milestones" style="display:none;">
+                <div class="milestones-list" id="milestonesList"></div>
+            </div>
+        </div>
+
+        
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>🎯 Matrice Difficulté / Terrain (Physiques)</h3>
+                <div class="card-badge" id="fizzyBadge" onclick="event.stopPropagation()">0/81</div>
+            </div>
+            <div class="dt-header" style="justify-content: center; gap:30px; margin-bottom: 5px;">
+                <span id="dtMoyD" style="color:var(--primary-dark);">Difficulté Moyenne: 0.00</span>
+                <span id="dtMoyT" style="color:var(--primary-dark);">Terrain Moyen: 0.00</span>
+            </div>
+            <div class="progress-container"><div class="progress-bar" id="fizzyProgress" style="width: 0%;"></div></div>
+            <div class="table-responsive">
+                <table class="dt-matrix" id="dtTable"></table>
+            </div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>🗓️ Calendrier des 366 Jours</h3>
+                <div class="card-badge" id="jours366Badge" onclick="event.stopPropagation()">0/366</div>
+            </div>
+            <div id="grid366Text" style="margin-bottom: 10px; font-weight: 600; color: var(--text-muted);"></div>
+            <div class="progress-container"><div class="progress-bar" id="jours366Progress" style="width: 0%;"></div></div>
+            <div class="grid-366-wrapper" id="grid366Container"></div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>📊 Habitudes de découverte</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchRadarTab('days')">Jours de la semaine</button>
+                    <button class="tab-btn" onclick="switchRadarTab('months')">Mois de l'année</button>
+                </div>
+            </div>
+            <div class="chart-container" id="containerRadarDays" style="height: 350px;"><canvas id="radarDaysChart"></canvas></div>
+            <div class="chart-container" id="containerRadarMonths" style="display:none; height: 350px;"><canvas id="radarMonthsChart"></canvas></div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header"><h3>📈 Répartition annuelle</h3></div>
+            <table class="annual-table" id="annualTable"></table>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>📊 Évolution des découvertes</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchChartTab('monthly')">Par mois (Détail)</button>
+                    <button class="tab-btn" onclick="switchChartTab('cumul')">Cumulatif</button>
+                </div>
+            </div>
+            <div class="chart-container" id="containerMonthly"><canvas id="monthlyChart"></canvas></div>
+            <div class="chart-container" id="containerCumul" style="display:none;"><canvas id="cumulativeChart"></canvas></div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>📦 Détails des Caches</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchDetailsTab('types')">Types de caches</button>
+                    <button class="tab-btn" onclick="switchDetailsTab('sizes')">Tailles des contenants</button>
+                </div>
+            </div>
+            <div class="chart-container" id="containerTypes"><canvas id="typeChart"></canvas></div>
+            <div id="containerSizes" style="display:none;">
+                <div class="chart-container"><canvas id="sizeChart"></canvas></div>
+                <p class="note" style="text-align:center; margin-top:5px;"><i>* Les Lab Caches ne sont pas intégrées dans ce graphique.</i></p>
+            </div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header"><h3>🏆 Tableau d'Honneur : Top 50 des journées</h3></div>
+            <div class="days-grid" id="daysGrid"></div>
+        </div>
+    </div>
+</div>
+
+<div id="dayModal" class="modal">
+    <div class="modal-content">
+        <span class="close-btn" onclick="fermerModal()">&times;</span>
+        <h2 id="modalDate">Détails</h2>
+        <div id="modalTotal"></div>
+        <ul id="modalTypesList" class="type-list"></ul>
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>

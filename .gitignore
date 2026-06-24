@@ -1,0 +1,12 @@
+# Fichiers de données sensibles (ne jamais partager)
+*.gpx
+*.txt
+*.csv
+
+# Ton fichier de carte privé
+carte_letintin45_*.html
+index.html
+
+# Fichiers système inutiles
+.DS_Store
+Thumbs.db
