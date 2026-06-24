@@ -222,3 +222,175 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
     background: #fee2e2;
     border-color: #ef4444;
 }
+
+/* =========================================
+   MODE SOMBRE MASTER PRO (100% COUVERTURE)
+   ========================================= */
+
+body.dark-mode {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    background-color: var(--bg) !important;
+    color: var(--text-main) !important;
+}
+
+/* 1. BLOCS PRINCIPAUX (Header, Cartes, Uploads, Modals) */
+body.dark-mode .header-top,
+body.dark-mode .card, 
+body.dark-mode .kpi-card,
+body.dark-mode .upload-box, 
+body.dark-mode .settings-box,
+body.dark-mode .modal-content,
+body.dark-mode .chart-container,
+body.dark-mode #calendar { 
+    background-color: var(--card) !important; 
+    border-color: #334155 !important; 
+    color: var(--text-main) !important;
+}
+
+/* 2. TITRES ET TEXTES GLOBAUX */
+body.dark-mode h1, body.dark-mode h2, body.dark-mode h3, body.dark-mode h4,
+body.dark-mode label, body.dark-mode p, body.dark-mode .card-header h3, 
+body.dark-mode .summary-text, body.dark-mode .stat-360-box,
+body.dark-mode .axis-label { 
+    color: var(--text-main) !important; 
+}
+/* Le petit texte d'information des secteurs manquants */
+body.dark-mode .note { color: #94a3b8 !important; }
+
+/* 3. BOUTONS, ONGLETS ET BADGES */
+body.dark-mode .tab-btn { background: #0f172a !important; border-color: #334155 !important; color: #94a3b8 !important; }
+body.dark-mode .tab-btn.active { background: var(--primary) !important; color: white !important; border-color: var(--primary-dark) !important; }
+body.dark-mode .btn-clear-small { background: #334155 !important; border-color: #475569 !important; color: white !important; }
+body.dark-mode .btn-clear-small:hover { background: #ef4444 !important; }
+body.dark-mode .card-badge { background: #334155 !important; color: #fbbf24 !important; border: 1px solid #475569 !important; }
+
+/* Force la couleur sombre sur les boutons d'upload malgré le style inline HTML */
+body.dark-mode .upload-btn { background-color: #0f172a !important; border-color: #475569 !important; color: #93c5fd !important; }
+body.dark-mode #gpxBtn, body.dark-mode #csvBtn { color: var(--secondary) !important; }
+
+/* 4. INPUTS, SLIDERS & CHECKBOX (Mode Prévisionnel inclus) */
+body.dark-mode input[type="text"], body.dark-mode input[type="date"], body.dark-mode input[type="number"] {
+    background-color: #0f172a !important; border: 1px solid #475569 !important; color: white !important;
+}
+body.dark-mode input[type="range"] { accent-color: #fbbf24 !important; }
+/* Override pour le bouton Mode Prévisionnel du Header */
+body.dark-mode .header-top label { background: #1e293b !important; border-color: #475569 !important; color: #93c5fd !important; }
+
+/* 5. TOUS LES TABLEAUX (Annuel, FTF, etc.) */
+body.dark-mode table, body.dark-mode th, body.dark-mode td {
+    background-color: var(--card) !important; color: var(--text-main) !important; border-color: #334155 !important;
+}
+body.dark-mode .annual-table tr td { color: #f1f5f9 !important; }
+body.dark-mode .annual-table th, body.dark-mode #ftfTable th { background: #334155 !important; color: #fbbf24 !important; }
+body.dark-mode .type-list li { border-color: #334155 !important; color: #cbd5e1 !important; }
+
+/* 6. MATRICES (Difficulté/Terrain & 366 Jours) */
+body.dark-mode .dt-matrix, body.dark-mode .grid-366 { background: transparent !important; }
+body.dark-mode .dt-empty { background: #0f172a !important; color: #475569 !important; }
+body.dark-mode .dt-total, body.dark-mode .grid-366 .total-cell { background: #334155 !important; color: white !important; }
+body.dark-mode .grid-366 .invalid { background-color: #0f172a !important; color: #334155 !important; }
+body.dark-mode .dt-cell { color: white !important; }
+
+/* 7. ÉLÉMENTS SPÉCIFIQUES (360°, Top 50, Milestones) */
+body.dark-mode .stats-360 { background: #0f172a !important; border: 1px solid #334155 !important; }
+body.dark-mode .sector-tag { background: #7f1d1d !important; color: #fecaca !important; border: 1px solid #991b1b !important; }
+body.dark-mode #mapPremiumControls { background: #1e293b !important; border-color: #475569 !important; color: white !important; }
+body.dark-mode #mapPremiumControls label { color: #cbd5e1 !important; }
+
+body.dark-mode .day-card, body.dark-mode .milestone-item { background: #334155 !important; border: 1px solid #475569 !important; color: white !important; }
+body.dark-mode .day-card .date, body.dark-mode .milestone-date { color: #94a3b8 !important; }
+body.dark-mode .day-card .count, body.dark-mode .milestone-count { color: #fbbf24 !important; }
+
+/* 8. GRAPHIQUES ET CALENDRIER (FullCalendar & Chart.js) */
+body.dark-mode canvas { background-color: transparent !important; }
+body.dark-mode .fc-theme-standard td, body.dark-mode .fc-theme-standard th, body.dark-mode .fc-scrollgrid { border-color: #334155 !important; }
+body.dark-mode .fc-col-header-cell { background: #334155 !important; color: white !important; }
+body.dark-mode .fc-day-today { background-color: rgba(59, 130, 246, 0.1) !important; }
+body.dark-mode .fc .fc-toolbar-title { color: white !important; }
+body.dark-mode .fc .fc-button-primary { background-color: #3b82f6 !important; border-color: #2563eb !important; }
+
+/* ====================================================
+   CORRECTIONS DE LISIBILITÉ & SLIDER 
+   ==================================================== */
+
+/* 1. Le Slider (Compatible tous navigateurs) */
+input[type="range"] {
+    accent-color: #059669; /* Vert de base */
+    cursor: pointer;
+}
+body.dark-mode input[type="range"] {
+    accent-color: #fbbf24 !important; /* Jaune pétant en mode sombre, sans erreur de code ! */
+    background-color: transparent !important;
+}
+
+/* 2. Agrandir les textes des KPI (Physiques, Labs, Jours consécutifs...) */
+.kpi-card .sub-text {
+    font-size: 13px !important; /* On grossit de 9px à 13px ! */
+    line-height: 1.4 !important;
+    font-weight: 700 !important;
+}
+body.dark-mode .kpi-card .sub-text {
+    color: #cbd5e1 !important; /* Gris clair hyper lisible en sombre */
+}
+
+/* 3. Agrandir le Top 50 */
+.day-card .date { font-size: 14px !important; font-weight: 800 !important; }
+.day-card .lab-badge { font-size: 12px !important; }
+
+/* 4. Tableau 366 Jours parfait en Mode Sombre */
+body.dark-mode .grid-366 { background-color: transparent !important; }
+body.dark-mode .grid-366 th { color: #f1f5f9 !important; font-size: 13px !important; }
+body.dark-mode .grid-366 td {
+    border: 1px solid #475569 !important; /* Sépare bien les cases */
+    color: white !important;
+}
+body.dark-mode .grid-366 .invalid {
+    background-color: #0f172a !important; /* Cases vides très sombres */
+    color: #334155 !important;
+}
+
+/* 5. Grosseur texte Tableau Matrice */
+body.dark-mode .dt-matrix th { font-size: 15px !important; color: #cbd5e1 !important; }
+body.dark-mode .dt-cell { font-size: 14px !important; }
+
+/* ====================================================
+   CORRECTION ALIGNEMENT DES KPI & TOP 50
+   ==================================================== */
+
+/* 1. Rendre les cartes KPI jolies et centrées */
+.kpi-grid {
+    align-items: stretch; 
+}
+.kpi-card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center; /* Centre parfaitement le texte au milieu */
+    align-items: center;
+    height: auto;
+    min-height: 120px; /* Donne une bonne hauteur de base */
+    padding: 15px 5px;
+}
+.kpi-card h4 {
+    min-height: auto !important; /* Annule l'ancien réglage moche */
+    margin-bottom: 8px;
+}
+.kpi-card .sub-text {
+    margin-top: 8px !important; /* Espace équilibré */
+    padding-top: 0 !important;
+}
+
+/* 2. Empêcher les badges #1, #2 du Top 50 de déborder à gauche */
+.days-grid {
+    padding: 15px 15px 15px 25px !important; /* On ajoute 25px d'espace à gauche pour laisser respirer les bulles ! */
+}
+.day-rank {
+    left: -15px !important; /* Tire un peu la bulle vers la gauche */
+    top: -15px !important; /* Et un peu vers le haut */
+}
+
+
+/* Mode Sombre pour le tableau des FTF Oubliés */
+body.dark-mode #missedFtfTable th { background: #334155 !important; color: #fbbf24 !important; }

@@ -353,32 +353,79 @@ function traiterGPX(xmlString, isDraft = false) {
                     tGpx.days[todayStr].typesDetail[type] = (tGpx.days[todayStr].typesDetail[type] || 0) + 1;
                 }
             } else {
-                // === LECTURE NORMALE ===
+                // === LECTURE NORMALE ET DÉTECTION FTF OUBLIÉS ===
+                let validLogs = [];
                 const logs = wpt.getElementsByTagNameNS("*", "log");
+                let userLogInfo = null;
+                let hasPublishLog = false;
+                let hasOtherPlayers = false;
+
                 for (let i = 0; i < logs.length; i++) {
+                    const logType = logs[i].getElementsByTagNameNS("*", "type")[0]?.textContent || "";
+                    
+                    // 1. OBLIGATOIRE : Ignorer le log du Reviewer (ex: miguaine)
+                    if (logType === "Publish Listing") {
+                        hasPublishLog = true;
+                        continue; 
+                    }
+
                     const finderNode = logs[i].getElementsByTagNameNS("*", "finder")[0];
                     const finder = finderNode ? finderNode.textContent.trim().toLowerCase() : "";
-                    
-                    if (pseudo === "" || finder === pseudo) {
-                        const logType = logs[i].getElementsByTagNameNS("*", "type")[0]?.textContent || "";
-                        if (["found it", "attended", "webcam photo taken"].includes(logType.toLowerCase())) {
-                            const dateTrouvaille = logs[i].getElementsByTagNameNS("*", "date")[0]?.textContent;
-                            const logText = logs[i].getElementsByTagNameNS("*", "text")[0]?.textContent || "";
-                            const isFTF = /\{\*FTF\*\}|\{FTF\}|\[FTF\]/i.test(logText);
-                            
-                            if (dateTrouvaille) {
-                                const dateCourte = getGeocachingDate(dateTrouvaille);
-                                if (dateCourte) {
-                                    if (!tGpx.days[dateCourte]) tGpx.days[dateCourte] = { total: 0, physiques: 0, typesDetail: {} };
-                                    tGpx.days[dateCourte].total++;
-                                    tGpx.days[dateCourte].physiques++;
-                                    tGpx.days[dateCourte].typesDetail[type] = (tGpx.days[dateCourte].typesDetail[type] || 0) + 1;
-                                    countLogTrouve++;
-                                    if (isFTF) {
-                                        tGpx.ftfCount++;
-                                        tGpx.ftfList.push({ date: dateCourte, name: cacheName, gcCode: gcCode });
-                                    }
+                    const lDateStr = logs[i].getElementsByTagNameNS("*", "date")[0]?.textContent;
+                    const logText = logs[i].getElementsByTagNameNS("*", "text")[0]?.textContent || "";
+                    const logId = parseInt(logs[i].getAttribute("id") || "0", 10); // L'ID donne l'ordre chronologique !
+
+                    if (finder !== "" && finder !== pseudo) hasOtherPlayers = true;
+
+                    // 2. Chercher les logs valides : Found it ou Write note avec FTF
+                    const isFound = ["found it", "attended", "webcam photo taken"].includes(logType.toLowerCase());
+                    const isWriteNoteFTF = (logType.toLowerCase() === "write note" && /ftf/i.test(logText));
+
+                    if (isFound || isWriteNoteFTF) {
+                        if (lDateStr) {
+                            const dateCourte = getGeocachingDate(lDateStr);
+                            if (dateCourte) {
+                                validLogs.push({ finder: finder, date: dateCourte, id: logId, text: logText, isFound: isFound });
+                                if (finder === pseudo && isFound) {
+                                    userLogInfo = { date: dateCourte, text: logText };
                                 }
+                            }
+                        }
+                    }
+                }
+
+                // 3. Traitement si c'est une de mes caches trouvées
+                if (userLogInfo) {
+                    const dateCourte = userLogInfo.date;
+                    const logText = userLogInfo.text;
+                    const isFTF = /\{\*FTF\*\}|\{FTF\}|\[FTF\]/i.test(logText);
+
+                    if (!tGpx.days[dateCourte]) tGpx.days[dateCourte] = { total: 0, physiques: 0, typesDetail: {} };
+                    tGpx.days[dateCourte].total++;
+                    tGpx.days[dateCourte].physiques++;
+                    tGpx.days[dateCourte].typesDetail[type] = (tGpx.days[dateCourte].typesDetail[type] || 0) + 1;
+                    countLogTrouve++;
+
+                    if (!tGpx.missedFtfList) tGpx.missedFtfList = [];
+
+                    if (isFTF) {
+                        tGpx.ftfCount++;
+                        tGpx.ftfList.push({ date: dateCourte, name: cacheName, gcCode: gcCode });
+                    } else {
+                        // --- LE MOTEUR DE DÉTECTION DES OUBLIS ---
+                        // On trie tous les logs valides par Date, puis par ID (chronologie absolue de Geocaching.com)
+                        validLogs.sort((a, b) => {
+                            let d1 = new Date(a.date).getTime();
+                            let d2 = new Date(b.date).getTime();
+                            if (d1 !== d2) return d1 - d2;
+                            return a.id - b.id; 
+                        });
+
+                        // Sécurité anti faux-positifs : Si je suis LE PREMIER de la liste triée
+                        // ET qu'il y a la preuve que c'est un historique complet (présence d'autres joueurs ou du reviewer)
+                        if (validLogs.length > 0 && validLogs[0].finder === pseudo) {
+                            if (hasPublishLog || hasOtherPlayers) {
+                                tGpx.missedFtfList.push({ date: dateCourte, name: cacheName, gcCode: gcCode });
                             }
                         }
                     }
@@ -580,13 +627,14 @@ function compilerEtAfficher() {
         alert("⚠️ Dashboard en attente :\nVeuillez remplir votre Pseudo et vos Coordonnées Domicile dans le panneau de contrôle pour démarrer.");
         return;
     }
-    let fs = { totaux: { physiques: 0, labs: 0, global: 0 }, types: {}, sizes: {}, dt: {}, days: {}, geo: [], ftfList: [] };
+    let fs = { totaux: { physiques: 0, labs: 0, global: 0 }, types: {}, sizes: {}, dt: {}, days: {}, geo: [], ftfList: [], missedFtfList: [] };
 
     let sources = [];
     if (gpxStats) sources.push(gpxStats);
     if (isPrevisionnel && draftStats) sources.push(draftStats);
 
     sources.forEach(src => {
+        
         fs.totaux.physiques += src.count;
         fs.totaux.global += src.count;
         for(let t in src.types) fs.types[t] = (fs.types[t] || 0) + src.types[t];
@@ -602,6 +650,7 @@ function compilerEtAfficher() {
         
         if (src.geo) fs.geo = fs.geo.concat(src.geo);
         if (src.ftfList) fs.ftfList = fs.ftfList.concat(src.ftfList);
+        if (src.missedFtfList) fs.missedFtfList = fs.missedFtfList.concat(src.missedFtfList); // <-- AJOUTE CECI ICI
         
         for(let date in src.days) {
             if (!fs.days[date]) fs.days[date] = { physiques: 0, labs: 0, total: 0, typesDetail: {} };
@@ -660,6 +709,7 @@ function compilerEtAfficher() {
         genererGrapheMoisEtCumul(records.monthsData);
         genererTableAnnuelle(records.yearsData, records.firstDateStr, records.todayPT);
         genererFTFList(fs.ftfList);
+        genererMissedFTFList(fs.missedFtfList); // <-- AJOUTE CECI ICI
         if (fs.geo && fs.geo.length > 0) { 
             window.lastGeoData = fs.geo; // On sauvegarde les données pour le curseur
             generer360(fs.geo); 
@@ -673,6 +723,9 @@ function compilerEtAfficher() {
     genererGraphesTypes(fs);
     genererTop50(fs.days);
     genererAgenda(fs.days);
+
+    // NOUVEAU : Force la mise à jour des couleurs des graphiques fraîchement créés
+    applyTheme(document.body.classList.contains('dark-mode'));
 }
 
 // === BARRE DE RECHERCHE ===
@@ -719,8 +772,7 @@ function genererGrapheMoisEtCumul(monthsData) {
                     onComplete: function() {
                         const ctx = this.ctx;
                         ctx.font = "bold 11px Arial";
-                        ctx.fillStyle = "#475569";
-                        ctx.textAlign = "center";
+                        ctx.fillStyle = document.body.classList.contains('dark-mode') ? "#ffffff" : "#475569";
                         ctx.textBaseline = "bottom";
                         this.data.datasets.forEach((dataset, i) => {
                             const meta = this.getDatasetMeta(i); 
@@ -1091,6 +1143,7 @@ let map360Instance = null;
 let mapCacheLayer = null;
 let mapGridLayer = null;
 
+// === CALCUL 360 SECTEURS (JUSQU'À 15 CACHES AVEC COULEURS DYNAMIQUES) ===
 function generer360(geoData) {
     let coordsInput = document.getElementById('homeCoords');
     if(!coordsInput) return;
@@ -1103,13 +1156,13 @@ function generer360(geoData) {
     let sectors = new Array(360).fill(0);
     let cachesPerSector = Array.from({length: 360}, () => []);
 
-    // 1. Calcul et limitation stricte à 5 caches par secteur
+    // 1. Limitation stricte à 15 caches par secteur (au lieu de 5)
     geoData.forEach(c => {
         let brng = calculerAzimut(homeLat, homeLon, c.lat, c.lon);
         let sector = Math.floor(brng);
         if(sector === 360) sector = 0;
         
-        let spaceLeft = 5 - sectors[sector];
+        let spaceLeft = 15 - sectors[sector]; // <-- LE MAX EST PASSÉ À 15
         if (spaceLeft > 0) {
             let toAdd = Math.min(spaceLeft, c.count);
             sectors[sector] += toAdd;
@@ -1141,9 +1194,14 @@ function generer360(geoData) {
 
     renderTable360();
 
-    // 2. NOUVEAU GRAPHIQUE RADAR POLAIRE (Façon Project-GC)
-    let dataPoints = sectors.map(s => s === 0 ? 0.3 : s);
-    let bgColors = sectors.map(s => s >= target360 ? 'rgba(16, 185, 129, 0.8)' : (s > 0 ? 'rgba(245, 158, 11, 0.8)' : 'rgba(239, 68, 68, 0.8)'));
+    // 2. COULEURS DYNAMIQUES SELON LE CURSEUR
+    let dataPoints = sectors.map(s => s === 0 ? 0.3 : Math.min(s, 15));
+    let bgColors = sectors.map(s => {
+        if (s >= target360) return 'rgba(16, 185, 129, 0.8)'; // Vert : Objectif atteint !
+        if (s === 0) return 'rgba(239, 68, 68, 0.8)';         // Rouge : 0 cache
+        return 'rgba(245, 158, 11, 0.9)';                     // Orange : En cours (entre 1 et l'objectif)
+    });
+
     let labels = Array.from({length: 360}, (_, i) => `${i}`);
 
     let canvas360 = document.getElementById('chart360');
@@ -1161,7 +1219,7 @@ function generer360(geoData) {
                 },
                 scales: {
                     r: {
-                        min: 0, max: 5,
+                        min: 0, max: 15, // <-- LE GRAPHIQUE VA JUSQU'À 15
                         ticks: { stepSize: 1, display: false },
                         grid: { color: 'rgba(0,0,0,0.1)' },
                         angleLines: { color: 'rgba(0,0,0,0.1)', stepSize: 10 },
@@ -1222,12 +1280,16 @@ function initMap360() {
     updateMapPremium();
 }
 
-// === NOUVELLE FONCTION POUR LE CURSEUR 360 (Fluide et sans bug) ===
+// === CORRECTION DU SLIDER 360 (Garde le mode sombre actif) ===
 function update360Target() {
     let val = document.getElementById('target360Slider').value;
     document.getElementById('target360Val').innerText = val;
     if (window.lastGeoData) {
-        generer360(window.lastGeoData); // Ne recalcule QUE le 360 !
+        generer360(window.lastGeoData); 
+    }
+    // MAGIE : On réapplique immédiatement le mode sombre au nouveau graphique généré !
+    if (document.body.classList.contains('dark-mode')) {
+        applyTheme(true);
     }
 }
 
@@ -1293,7 +1355,7 @@ function updateMapPremium() {
             if (cachesToShow && cachesToShow.caches) {
                 let drawnCount = 0;
                 window.lastGeoData.forEach(c => {
-                    if (cachesToShow.caches.includes(c.gcCode) && drawnCount < 5) {
+                    if (cachesToShow.caches.includes(c.gcCode) && drawnCount < 15) { // On passe à 15 max affichés
                         L.circleMarker([c.lat, c.lon], {radius: 6, fillColor: '#10b981', color: '#fff', weight: 1, fillOpacity: 1}).bindPopup(`<b>${c.gcCode}</b>`).addTo(mapCacheLayer);
                         drawnCount++;
                     }
@@ -1401,6 +1463,38 @@ function ouvrirModalDT(d, t) {
     
     document.getElementById('modalTypesList').innerHTML = htmlTypes;
     document.getElementById('dayModal').style.display = 'block';
+}
+
+// === GÉNÉRER LA LISTE DES FTF OUBLIÉS ===
+function genererMissedFTFList(missedList) {
+    const tBody = document.getElementById('missedFtfTableBody');
+    if(document.getElementById('badgeMissedFtf')) document.getElementById('badgeMissedFtf').innerText = missedList ? missedList.length : 0;
+    
+    if (!missedList || missedList.length === 0) {
+        if(tBody) tBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">Aucun FTF oublié détecté ! Tout est bien taggé.</td></tr>`;
+        return;
+    }
+
+    missedList.sort((a, b) => new Date(b.date) - new Date(a.date)); 
+    let html = '';
+    missedList.forEach(ftf => {
+        let dStr = ftf.date.split('-').reverse().join('/');
+        // S'affiche en rouge pour attirer l'attention
+        html += `<tr><td><strong>${dStr}</strong></td><td style="color:#ef4444; font-weight:bold;">${ftf.gcCode}</td><td>${ftf.name}</td></tr>`;
+    });
+    if(tBody) tBody.innerHTML = html;
+}
+
+// === METTRE À JOUR LE GESTIONNAIRE D'ONGLETS EXPLOITS ===
+function switchExploitsTab(tab) {
+    document.getElementById('tabContent-ftf').style.display = tab === 'ftf' ? 'block' : 'none';
+    document.getElementById('tabContent-missedFtf').style.display = tab === 'missedFtf' ? 'block' : 'none';
+    document.getElementById('tabContent-milestones').style.display = tab === 'milestones' ? 'block' : 'none';
+    
+    const btns = document.getElementById('tabContent-ftf').parentElement.querySelectorAll('.tab-btn');
+    btns[0].classList.toggle('active', tab === 'ftf');
+    btns[1].classList.toggle('active', tab === 'missedFtf');
+    btns[2].classList.toggle('active', tab === 'milestones');
 }
 
 // === RACCOURCIS CLAVIER ===
@@ -1540,3 +1634,134 @@ function nettoyerTexteGeocaching(texteBrut) {
     // Si le nettoyage n'a rien trouvé, on retourne le texte original par sécurité
     return textePropre.trim() !== "" ? textePropre.trim() : texteBrut.trim();
 }
+
+// === GESTION DU THEME SOMBRE SANS BUG D'AXES ===
+function applyTheme(isDark) {
+    if (isDark) {
+        document.body.classList.add('dark-mode');
+    } else {
+        document.body.classList.remove('dark-mode');
+    }
+
+    if (typeof Chart !== 'undefined') {
+        const textColor = isDark ? '#ffffff' : '#1e293b'; 
+        const gridColor = isDark ? '#334155' : '#e2e8f0';
+
+        Chart.defaults.color = textColor;
+        Chart.defaults.font.size = 13;
+
+        Object.values(Chart.instances).forEach(chart => {
+            chart.options.color = textColor;
+            if (!chart.options.scales) chart.options.scales = {};
+
+            // 1. Uniquement pour les Barres ou Lignes (Évite les numéros 0-11 bizarres sur les ronds !)
+            if (chart.config.type === 'bar' || chart.config.type === 'line') {
+                if (!chart.options.scales.x) chart.options.scales.x = {};
+                if (!chart.options.scales.x.ticks) chart.options.scales.x.ticks = {};
+                chart.options.scales.x.ticks.color = textColor;
+                if (!chart.options.scales.x.grid) chart.options.scales.x.grid = {};
+                chart.options.scales.x.grid.color = gridColor;
+
+                if (!chart.options.scales.y) chart.options.scales.y = {};
+                if (!chart.options.scales.y.ticks) chart.options.scales.y.ticks = {};
+                chart.options.scales.y.ticks.color = textColor;
+                if (!chart.options.scales.y.grid) chart.options.scales.y.grid = {};
+                chart.options.scales.y.grid.color = gridColor;
+            }
+
+            // 2. Uniquement pour le Radar et PolarArea
+            if (chart.config.type === 'radar' || chart.config.type === 'polarArea') {
+                // On s'assure qu'il n'y a pas d'axe X fantôme
+                if (chart.options.scales.x) delete chart.options.scales.x;
+                if (chart.options.scales.y) delete chart.options.scales.y;
+
+                if (!chart.options.scales.r) chart.options.scales.r = {};
+                if (!chart.options.scales.r.ticks) chart.options.scales.r.ticks = {};
+                chart.options.scales.r.ticks.color = isDark ? '#ffffff' : '#475569';
+                chart.options.scales.r.ticks.backdropColor = isDark ? '#1e293b' : '#ffffff';
+                
+                if (!chart.options.scales.r.pointLabels) chart.options.scales.r.pointLabels = {};
+                chart.options.scales.r.pointLabels.color = textColor;
+                chart.options.scales.r.pointLabels.font = { size: 14, weight: 'bold' };
+                
+                if (!chart.options.scales.r.grid) chart.options.scales.r.grid = {};
+                chart.options.scales.r.grid.color = gridColor;
+            }
+
+            // 3. Légendes
+            if (!chart.options.plugins) chart.options.plugins = {};
+            if (!chart.options.plugins.legend) chart.options.plugins.legend = { labels: {} };
+            if (!chart.options.plugins.legend.labels) chart.options.plugins.legend.labels = {};
+            chart.options.plugins.legend.labels.color = textColor;
+            chart.options.plugins.legend.labels.font = { size: 13, weight: 'bold' };
+
+            chart.update();
+        });
+    }
+}
+
+function toggleDarkMode() {
+    const isDark = !document.body.classList.contains('dark-mode');
+    localStorage.setItem('darkMode', isDark);
+    applyTheme(isDark);
+}
+
+// Initialise le thème au chargement
+window.addEventListener('load', () => {
+    const isDark = localStorage.getItem('darkMode') === 'true';
+    applyTheme(isDark);
+});
+
+function detecterFtfOublies(xmlString) {
+    const parser = new DOMParser();
+    const xml = parser.parseFromString(xmlString, "text/xml");
+    const wpts = xml.getElementsByTagName("wpt");
+    let missedFtfList = [];
+
+    for (let wpt of wpts) {
+        const cache = wpt.getElementsByTagNameNS("*", "cache")[0];
+        if (!cache) continue;
+
+        const logs = wpt.getElementsByTagNameNS("*", "log");
+        let validLogs = [];
+
+        for (let log of logs) {
+            const type = log.getElementsByTagNameNS("*", "type")[0].textContent;
+            if (type === "Publish Listing") continue; // On ignore le reviewer
+
+            const finder = log.getElementsByTagNameNS("*", "finder")[0].textContent.trim();
+            const logId = parseInt(log.getAttribute("id"), 10);
+            const text = (log.getElementsByTagNameNS("*", "text")[0]?.textContent || "").toLowerCase();
+            
+            // On ne prend que les Found It ou les notes qui réclament le FTF
+            if (type === "Found it" || (type === "Write note" && text.includes("ftf"))) {
+                validLogs.push({ finder, logId, text });
+            }
+        }
+
+        // Tri chronologique par ID
+        validLogs.sort((a, b) => a.logId - b.logId);
+
+        // Si le premier log est Letintin45 et qu'il n'a pas mis le tag FTF
+        if (validLogs.length > 0 && validLogs[0].finder === "Letintin45") {
+            if (!validLogs[0].text.includes("ftf")) {
+                missedFtfList.push({
+                    gcCode: wpt.getElementsByTagNameNS("*", "name")[0].textContent,
+                    name: cache.getElementsByTagNameNS("*", "name")[0].textContent,
+                    date: validLogs[0].date // à extraire proprement
+                });
+            }
+        }
+    }
+    return missedFtfList;
+}
+
+// 1. Gestionnaire du nouveau bouton FTF
+document.getElementById('ftfInput').addEventListener('change', e => {
+    if (!e.target.files[0]) return;
+    document.getElementById('ftfBtn').innerHTML = "⏳ Analyse en cours...";
+    const reader = new FileReader();
+    reader.onload = ev => traiterFtfGpx(ev.target.result);
+    reader.readAsText(e.target.files[0]);
+});
+
