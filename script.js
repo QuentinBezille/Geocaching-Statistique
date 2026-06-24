@@ -1756,12 +1756,3 @@ function detecterFtfOublies(xmlString) {
     return missedFtfList;
 }
 
-// 1. Gestionnaire du nouveau bouton FTF
-document.getElementById('ftfInput').addEventListener('change', e => {
-    if (!e.target.files[0]) return;
-    document.getElementById('ftfBtn').innerHTML = "⏳ Analyse en cours...";
-    const reader = new FileReader();
-    reader.onload = ev => traiterFtfGpx(ev.target.result);
-    reader.readAsText(e.target.files[0]);
-});
-
