@@ -1477,17 +1477,442 @@ function genererMissedFTFList(missedList) {
     if(tBody) tBody.innerHTML = html;
 }
 
-// === GESTION ONGLET FTF / MILESTONES ===
+// =====================================================================
+// === GESTION DES ONGLETS EXPLOITS & PALIERS ==========================
+// =====================================================================
 function switchExploitsTab(tab) {
     document.getElementById('tabContent-ftf').style.display = tab === 'ftf' ? 'block' : 'none';
+    document.getElementById('tabContent-missedFtf').style.display = tab === 'missedFtf' ? 'block' : 'none';
     document.getElementById('tabContent-milestones').style.display = tab === 'milestones' ? 'block' : 'none';
     
     const btns = document.getElementById('tabContent-ftf').parentElement.querySelectorAll('.tab-btn');
-    // On sécurise pour s'assurer que les boutons existent bien
-    if (btns.length >= 2) {
+    if (btns.length >= 3) {
         btns[0].classList.toggle('active', tab === 'ftf');
-        btns[1].classList.toggle('active', tab === 'milestones');
+        btns[1].classList.toggle('active', tab === 'missedFtf');
+        btns[2].classList.toggle('active', tab === 'milestones');
     }
+}
+
+// =====================================================================
+// === MODULE FTF OUBLIÉS (MOTEUR HYBRIDE INTELLIGENT) =================
+// =====================================================================
+let ftfGpxContent = "";
+let ftfTxtContent = "";
+
+// Mise à jour visuelle des boutons
+function updateFtfBtn(id, isLoaded, text) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (isLoaded) {
+        btn.innerText = "✅ " + text + " Chargé";
+        btn.style.backgroundColor = "#d1fae5";
+        btn.style.borderColor = "#059669";
+    } else {
+        btn.innerText = (id === 'ftfGpxBtn') ? "📁 1. GPX (Zone)" : "📄 2. TXT (Project-GC)";
+        btn.style.backgroundColor = "#fefce8";
+        btn.style.borderColor = "#eab308";
+    }
+}
+
+// Chargement des fichiers
+window.addEventListener('load', () => {
+    const ftfGpxInput = document.getElementById('ftfGpxInput');
+    if (ftfGpxInput) {
+        ftfGpxInput.addEventListener('change', e => {
+            if (!e.target.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = ev => { ftfGpxContent = ev.target.result; updateFtfBtn('ftfGpxBtn', true, "GPX"); };
+            reader.readAsText(e.target.files[0]);
+        });
+    }
+
+    const ftfTxtInput = document.getElementById('ftfTxtInput');
+    if (ftfTxtInput) {
+        ftfTxtInput.addEventListener('change', e => {
+            if (!e.target.files[0]) return;
+            const reader = new FileReader();
+            reader.onload = ev => { ftfTxtContent = ev.target.result; updateFtfBtn('ftfTxtBtn', true, "TXT"); };
+            reader.readAsText(e.target.files[0]);
+        });
+    }
+});
+
+// Vider les fichiers
+function clearSpecific(type) {
+    if (type === 'ftfGpx') { ftfGpxContent = ""; updateFtfBtn('ftfGpxBtn', false, ""); }
+    if (type === 'ftfTxt') { ftfTxtContent = ""; updateFtfBtn('ftfTxtBtn', false, ""); }
+    // Ajoute ici tes autres clearSpecific si nécessaire
+}
+
+// 🧠 CERVEAU : Analyse du texte pour éviter les "STF"
+function estUnFtfOublieValide(texteBrut) {
+    let texte = texteBrut.toLowerCase();
+    
+    // S'il y a déjà les crochets officiels, ce n'est pas un oubli !
+    if (texte.includes("[ftf]") || texte.includes("{ftf}") || texte.includes("*ftf*") || texte.includes("(ftf)")) return false;
+    
+    // Si on détecte un aveu d'échec (STF, loupé, etc.), on rejette !
+    let regexNegation = /\b(pas de ftf|pas ftf|no ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|deuxième|troisième|devancé)\b/g;
+    if (regexNegation.test(texte)) return false; 
+    
+    return true; 
+}
+
+// 🧹 LISSEUR DE NOM : Enlève les accents et la ponctuation pour la fusion
+// Nettoyage et normalisation d'un nom de cache (utilisé pour déduplication)
+function nettoyerNomCache(nom) {
+    if (!nom) return "";
+    // Enlève la partie " by Auteur" si présente (GPX contient parfois "Name by Author")
+    nom = nom.split(/ by /i)[0].trim();
+    return nom.toLowerCase()
+              .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Enlève les accents
+              .replace(/[^a-z0-9]/g, ""); // Ne garde que les lettres et chiffres
+}
+
+// =====================================================================
+// === MOTEUR FTF OUBLIÉS (INTELLIGENCE SÉMANTIQUE & PROBABILITÉS) =====
+// =====================================================================
+let exclusResults = []; 
+let ftfResults = [];    
+
+// 🧠 FILTRE 1 : Tag officiel explicite
+function estOfficiellementTaggue(texte) {
+    return /\{\*ftf\*\}|\{ftf\}|\[ftf\]|\(ftf\)/i.test(texte);
+}
+
+// 🧠 FILTRE 2 : Aveux d'échec stricts
+function contientNegationSTF(texte) {
+    return /\b(pas de ftf|pas ftf|no ftf|aucun ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|les deuxièmes|les 2ème|les 2eme|suis 2ème|suis deuxième|sommes 2ème|sommes deuxième|devancé)\b/i.test(texte);
+}
+
+// 🧠 FILTRE 3 : Les Quiproquos Contextuels (NOUVEAU)
+// Détecte les phrases où le mot FTF est utilisé, mais pour parler d'une AUTRE cache.
+function contientFauxPositifFTF(texte) {
+    return /(ftf sur l'avant|ftf sur la préc|pas.*?en ftf|ftf.*sur une autre|aucun.*?ftf)/i.test(texte);
+}
+
+// 🧠 FILTRE 4 : Preuve positive (sans les crochets)
+function contientPreuveFTF(texte) {
+    return /\b(ftf|premier|preum's|preums|patbf|first to find)\b/i.test(texte) || /en premier/i.test(texte);
+}
+
+// 🧹 NETTOYEUR ULTIME : Normalisation stricte
+function nettoyerNomCache(nom) {
+    if (!nom) return "";
+    nom = nom.split(/ by /i)[0].trim(); 
+    return nom.toLowerCase()
+              .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
+              .replace(/[^a-z0-9]/g, ""); 
+}
+
+function echapperHtml(str) {
+    return (str || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function escHtml(s) { return echapperHtml(s); }
+
+// 🧮 LE CALCULATEUR DE PROBABILITÉS
+function calculerProbabilite(c) {
+    let score = 50; 
+    let text = (c.fullText || "").toLowerCase();
+
+    // 1. Poids du fichier TXT (Le "Patron")
+    if (c.txtNumLogs !== undefined) {
+        if (c.txtNumLogs <= 2) score += 35;       
+        else if (c.txtNumLogs <= 4) score += 10;  
+        else if (c.txtNumLogs <= 7) score -= 15;  
+        else score -= 40;                         
+    }
+
+    // 2. Poids du fichier GPX (La Chronologie)
+    if (c.gpxFound) {
+        if (c.isFirstGpxLog) score += 30; 
+        else score -= 40;                 
+        
+        if (c.isFirstGpxLog && c.hasPublish) score += 20; 
+    }
+
+    // 3. Bonus Mots-clés (À condition qu'il n'y ait pas de quiproquo)
+    if (contientPreuveFTF(text) && !contientFauxPositifFTF(text)) {
+        score += 30;
+    }
+
+    // 4. Boost Mots-clés indirects
+    if (/\b(bingo)\b/i.test(text)) {
+        score += 15;
+    }
+
+    if (score > 100) score = 100;
+    if (score < 5) score = 5;
+    return score;
+}
+
+// 🚀 L'ANALYSEUR PRINCIPAL
+function lancerAnalyseFtfOublies() {
+    if (!ftfTxtContent) { alert("⚠️ Le fichier TXT (Project-GC) est obligatoire car c'est lui le Patron !"); return; }
+    const pseudo = document.getElementById('username').value.trim().toLowerCase();
+    const btn = document.getElementById('btnLancerFtfOublies');
+    if(btn) btn.innerText = "⏳ Analyse stricte en cours...";
+    
+    setTimeout(() => {
+        try {
+            let fusionMap = new Map();
+            exclusResults = [];
+            ftfResults = [];
+
+            // --- 1. LECTURE DU FICHIER TXT (CRÉATION DE LA BOÎTE FERMÉE) ---
+            const lignes = ftfTxtContent.split('\n');
+            let cacheEnCours = null;
+            
+            for (let ligne of lignes) {
+                ligne = ligne.trim();
+                // Ignorer les lignes inutiles
+                if (!ligne || ligne.startsWith("Pseudo:") || ligne.includes("Cache\tDate de visite")) continue;
+                
+                // Découpage strict par tabulation (\t) basé sur ton fichier
+                let parts = ligne.split('\t');
+                
+                // Si la ligne a au moins 4 colonnes et que la colonne 3 est une date (YYYY-MM-DD)
+                if (parts.length >= 4 && /^\d{4}-\d{2}-\d{2}$/.test(parts[2].trim())) {
+                    if (cacheEnCours) fusionMap.set(nettoyerNomCache(cacheEnCours.name), cacheEnCours);
+                    
+                    cacheEnCours = { 
+                        source: "Project-GC", 
+                        gcCode: "P-GC", 
+                        name: parts[1].trim(), 
+                        date: parts[2].trim(), 
+                        txtNumLogs: parseInt(parts[3].trim(), 10) || 0, // Récupération parfaite du nombre de logs
+                        fullText: "", 
+                        gpxFound: false 
+                    };
+                } 
+                // Sinon, c'est le texte du log de la cache en cours
+                else if (cacheEnCours && !ligne.includes("Afficher le log")) {
+                    cacheEnCours.fullText += ligne + " ";
+                }
+            }
+            if (cacheEnCours) fusionMap.set(nettoyerNomCache(cacheEnCours.name), cacheEnCours);
+
+            // --- 2. LECTURE DU FICHIER GPX (POUR ENRICHISSEMENT UNIQUEMENT) ---
+            if (ftfGpxContent && pseudo) {
+                const parser = new DOMParser();
+                const xml = parser.parseFromString(ftfGpxContent, "text/xml");
+                const wpts = xml.getElementsByTagName("wpt");
+                
+                for (let wpt of wpts) {
+                    let groundspeakName = wpt.getElementsByTagNameNS("*", "cache")[0]?.getElementsByTagNameNS("*", "name")[0]?.textContent;
+                    let descRaw = wpt.getElementsByTagNameNS("*", "desc")[0]?.textContent || "Inconnue";
+                    let cacheNameRaw = groundspeakName || descRaw.split(" by ")[0].trim(); 
+                    
+                    let cacheKey = nettoyerNomCache(cacheNameRaw);
+                    
+                    // ⛔ LA RÈGLE D'OR : Le TXT est le Patron ! 
+                    // Si la cache du GPX n'est pas dans notre Map, on la jette immédiatement.
+                    let existing = fusionMap.get(cacheKey);
+                    if (!existing) continue; 
+                    
+                    let gcCodeRaw = wpt.getElementsByTagNameNS("*", "name")[0]?.textContent || "?";
+                    let logs = wpt.getElementsByTagNameNS("*", "log");
+                    let validLogs = [], publishLog = null, someoneElseSaidFtf = false;
+                    
+                    for (let log of logs) {
+                        if (log.getElementsByTagNameNS("*", "type")[0]?.textContent === "Publish Listing") publishLog = log;
+                        let finder = log.getElementsByTagNameNS("*", "finder")[0]?.textContent.toLowerCase();
+                        let text = log.getElementsByTagNameNS("*", "text")[0]?.textContent || "";
+                        if (["found it", "attended", "write note"].includes(log.getElementsByTagNameNS("*", "type")[0]?.textContent.toLowerCase())) {
+                            validLogs.push({ finder, id: parseInt(log.getAttribute("id")), text });
+                        }
+                    }
+                    validLogs.sort((a,b) => a.id - b.id); // Tri chronologique
+                    let userLogs = validLogs.filter(l => l.finder === pseudo);
+
+                    // Vérifier si quelqu'un a crié victoire AVANT le premier log du joueur
+                    for(let l of validLogs) { 
+                        if (userLogs.length > 0 && l.id < userLogs[0].id && /\b(ftf|preums|premier)\b/i.test(l.text)) {
+                            someoneElseSaidFtf = true; 
+                        }
+                    }
+
+                    // On met à jour la cache du TXT avec les super-pouvoirs du GPX
+                    existing.gcCode = gcCodeRaw;
+                    existing.name = cacheNameRaw; // On prend le vrai nom propre du GPX
+                    existing.gpxFound = true;
+                    existing.hasPublish = (publishLog !== null);
+                    existing.someoneElseSaidFtf = someoneElseSaidFtf;
+                    existing.isFirstGpxLog = (validLogs.length > 0 && userLogs.length > 0 && validLogs[0].id === userLogs[0].id);
+
+                    if (userLogs.length > 0) {
+                        existing.fullText += " " + userLogs.map(l => l.text).join(" ");
+                    }
+                    existing.source = "GPX + Project-GC";
+
+                    fusionMap.set(cacheKey, existing);
+                }
+            }
+
+            // --- 3. TRAITEMENT DES EXCLUSIONS ET DES SCORES ---
+            for (let [key, c] of fusionMap) {
+                let fullTxt = c.fullText || "";
+
+                // Filtre 1 : Le joueur a déjà mis les crochets officiels
+                if (estOfficiellementTaggue(fullTxt)) {
+                    exclusResults.push({ date: c.date, name: c.name, log: fullTxt, raison: "✅ Déjà taggué officiel" });
+                    continue;
+                }
+                
+                // 🧠 FILTRE 2 : Est-ce qu'il y a un aveu d'échec sur le terrain ?
+                function contientNegationSTF(texte) {
+                    // Regex affinée : on retire "deuxième" tout seul pour éviter les faux positifs ("au deuxième passage").
+                    // On cible spécifiquement les expressions qui indiquent un STF.
+                    return /\b(pas de ftf|pas ftf|no ftf|aucun ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|les deuxièmes|les 2ème|les 2eme|suis 2ème|suis deuxième|sommes 2ème|sommes deuxième|devancé)\b/i.test(texte);
+                }
+
+                // LE NOUVEAU FILTRE EST ICI :
+                if (contientFauxPositifFTF(fullTxt)) {
+                    exclusResults.push({ date: c.date, name: c.name, log: fullTxt, raison: "⚠️ Quiproquo contextuel" });
+                    continue;
+                }
+
+                // Filtre 3 : Le GPX prouve qu'un autre joueur a logué "FTF" avant lui
+                if (c.someoneElseSaidFtf) {
+                    exclusResults.push({ date: c.date, name: c.name, log: fullTxt, raison: "👤 Un autre joueur a le FTF" });
+                    continue;
+                }
+
+                // Si elle survit, on calcule son pourcentage et on l'affiche !
+                c.proba = calculerProbabilite(c);
+                ftfResults.push(c);
+            }
+
+            afficherTableauFtfOublies();
+            afficherExclus();
+            if(btn) btn.innerText = "Lancer l'analyse 🕵️";
+
+        } catch (e) { 
+            console.error("Erreur FTF :", e);
+            alert("Erreur lors de l'analyse : " + e.message); 
+            if(btn) btn.innerText = "Lancer l'analyse 🕵️";
+        }
+    }, 100);
+}
+
+// 🎨 GESTION DE L'AFFICHAGE DU TABLEAU
+function afficherTableauFtfOublies() {
+    const tBody = document.getElementById('missedFtfTableBody');
+    const badge = document.getElementById('badgeMissedFtfLabel');
+    if (!tBody) return;
+    
+    let activeFilter = document.getElementById('filterProba').value;
+    let searchQuery = document.getElementById('searchFtf').value.toLowerCase();
+
+    // Application des filtres de recherche et probabilités
+    let listFiltree = ftfResults.filter(c => {
+        let matchRecherche = c.name.toLowerCase().includes(searchQuery) || (c.gcCode && c.gcCode.toLowerCase().includes(searchQuery));
+        let matchProba = true;
+        if (activeFilter === "high") matchProba = c.proba > 70;
+        if (activeFilter === "medium") matchProba = c.proba > 30 && c.proba <= 70;
+        if (activeFilter === "low") matchProba = c.proba <= 30;
+        return matchRecherche && matchProba;
+    });
+
+    if (badge) badge.innerText = `${listFiltree.length} Oubli(s)`;
+
+    if (listFiltree.length === 0) {
+        tBody.innerHTML = `<tr><td colspan="3" style="text-align:center; padding: 20px; color:#64748b;">Aucun résultat ne correspond à vos filtres.</td></tr>`;
+        return;
+    }
+
+    // Tri par probabilité décroissante, puis date
+    listFiltree.sort((a, b) => b.proba - a.proba || new Date(b.date) - new Date(a.date));
+
+    let html = '';
+    listFiltree.forEach(ftf => {
+        let dStr = (ftf.date || '').split('-').reverse().join('/');
+        let colorProba = ftf.proba > 70 ? "#10b981" : (ftf.proba > 30 ? "#f59e0b" : "#ef4444");
+        let iconProba = ftf.proba > 70 ? "🔥" : (ftf.proba > 30 ? "⚡" : "🧊");
+        
+        let gcLink = (ftf.gcCode && ftf.gcCode !== "P-GC" && ftf.gcCode !== "?")
+            ? `<a href="https://coord.info/${ftf.gcCode}" target="_blank" style="color:#2563eb; text-decoration:none; font-weight:bold;">${ftf.gcCode}</a>`
+            : `<span style="color:#64748b; font-weight:bold;">${ftf.gcCode || 'P-GC'}</span>`;
+
+        html += `
+        <tr>
+            <td style="font-size:12px;"><strong>${dStr}</strong><br><span style="color:#94a3b8; font-size:10px;">${ftf.source || ''}</span></td>
+            <td style="text-align:center;"><span style="background:${colorProba}22; color:${colorProba}; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:12px;">${iconProba} ${ftf.proba}%</span></td>
+            <td>${gcLink}<br><span style="font-size:13px;">${escHtml(ftf.name)}</span></td>
+        </tr>`;
+    });
+
+    tBody.innerHTML = html;
+}
+
+function filtrerTableauFtf() {
+    afficherTableauFtfOublies();
+}
+
+// 🗑️ GESTION DU TIROIR DES CACHES EXCLUES
+function toggleExclus() {
+    const content = document.getElementById('exclusContent');
+    const chevron = document.getElementById('chevronExclus');
+    if (content.style.display === "none" || content.style.display === "") {
+        content.style.display = "block";
+        chevron.innerText = "▲";
+    } else {
+        content.style.display = "none";
+        chevron.innerText = "▼";
+    }
+}
+
+function afficherExclus() {
+    document.getElementById('exclusCount').innerText = exclusResults.length;
+    let container = document.getElementById('exclusContent');
+    
+    if (exclusResults.length === 0) {
+        container.innerHTML = `<p style="color: #94a3b8; text-align: center; margin: 5px;">Aucune exclusion pour le moment.</p>`;
+        return;
+    }
+
+    exclusResults.sort((a, b) => new Date(b.date) - new Date(a.date));
+    let html = '';
+    exclusResults.forEach(e => {
+        let textLogSafe = escHtml(e.log);
+        let textLogShort = textLogSafe.substring(0, 150) + (textLogSafe.length > 150 ? '...' : '');
+        
+        html += `
+        <div style="border-bottom: 1px solid #e2e8f0; padding: 8px 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <strong style="color: #1e293b; font-size: 13px;">${escHtml(e.name)}</strong>
+                <span style="background:#fee2e2; color:#dc2626; padding:2px 6px; border-radius:4px; font-weight:bold; font-size: 11px;">${e.raison}</span>
+            </div>
+            <div style="color: #64748b; margin-top: 4px; font-style: italic;">"${textLogShort}"</div>
+        </div>`;
+    });
+    container.innerHTML = html;
+}
+
+// 🗑️ GESTION DU TIROIR DES CACHES EXCLUES
+function afficherExclus() {
+    document.getElementById('exclusCount').innerText = exclusResults.length;
+    let container = document.getElementById('exclusContent');
+    
+    if (exclusResults.length === 0) {
+        container.innerHTML = `<p style="color: #94a3b8; text-align: center; margin: 5px;">Aucune exclusion pour le moment.</p>`;
+        return;
+    }
+
+    exclusResults.sort((a, b) => new Date(b.date) - new Date(a.date));
+    let html = '';
+    exclusResults.forEach(e => {
+        let textLogShort = escHtml(e.log.substring(0, 150)) + (e.log.length > 150 ? '...' : '');
+        html += `
+        <div style="border-bottom: 1px solid #e2e8f0; padding: 8px 0;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <strong style="color: #1e293b; font-size: 13px;">${escHtml(e.name)}</strong>
+                <span style="background:#fee2e2; color:#dc2626; padding:2px 6px; border-radius:4px; font-weight:bold; font-size: 11px;">${e.raison}</span>
+            </div>
+            <div style="color: #64748b; margin-top: 4px; font-style: italic;">"${textLogShort}"</div>
+        </div>`;
+    });
+    container.innerHTML = html;
 }
 
 // === RACCOURCIS CLAVIER ===
@@ -1688,21 +2113,22 @@ window.addEventListener('load', () => {
 // === MODULE GÉNÉRATEUR DE CHECKER PROJECT-GC =========================
 // =====================================================================
 
+// =====================================================================
+// === MODULE GÉNÉRATEUR DE CHECKER PROJECT-GC (CORRIGÉ) ===============
+// =====================================================================
 function genererCodeLua() {
     try {
         const limit = parseInt(document.getElementById('chkLimit').value) || 1;
         const keyword = document.getElementById('chkKeyword')?.value.trim();
         
-        // 1. Récupération des Types (S'adapte automatiquement au HTML)
+        // 1. Récupération des Types dynamiques
         const typeCheckboxes = document.querySelectorAll('.chk-type:checked');
         const types = Array.from(typeCheckboxes).map(cb => `"${cb.value}"`);
         if (types.length === 0) { alert("Sélectionnez au moins un type de cache !"); return; }
 
-        // 2. Récupération des Tailles
         const sizeCheckboxes = document.querySelectorAll('.chk-size:checked');
         const sizes = Array.from(sizeCheckboxes).map(cb => `"${cb.value}"`);
 
-        // 3. Récupération des autres champs optionnels
         const country = document.getElementById('chkCountry')?.value.trim();
         const region = document.getElementById('chkRegion')?.value.trim();
         const minD = parseFloat(document.getElementById('chkMinD')?.value);
@@ -1710,16 +2136,14 @@ function genererCodeLua() {
         const hiddenFrom = document.getElementById('chkHiddenFrom')?.value;
         const hiddenTo = document.getElementById('chkHiddenTo')?.value;
 
-        // 4. Construction intelligente du filtre API Project-GC
+        // 2. Construction intelligente
         let filtresArray = [];
         filtresArray.push(`types = {${types.join(', ')}}`);
         
-        // On n'envoie les tailles à PGC que si on ne les veut pas toutes (optimisation serveur)
         if (sizes.length > 0 && sizes.length < document.querySelectorAll('.chk-size').length) {
             filtresArray.push(`sizes = {${sizes.join(', ')}}`);
         }
         
-        // Ajout des filtres géographiques et D/T si renseignés
         if (country) filtresArray.push(`countries = {"${country}"}`);
         if (region) filtresArray.push(`regions = {"${region}"}`);
         if (!isNaN(minD)) filtresArray.push(`difficulty = {min = ${minD}}`);
@@ -1729,14 +2153,12 @@ function genererCodeLua() {
 
         const filtresLua = filtresArray.join(',\n        ');
 
-        // 5. Bloc de filtrage par mot-clé (S'ajoute uniquement si un mot est tapé)
         let keywordFilterBlock = "";
         if (keyword) {
             keywordFilterBlock = `
-    -- Filtrage additionnel par mot-clé dans le nom (insensible à la casse)
-    local target_keyword = string.lower("${keyword}")
+    -- Filtrage additionnel par mot-clé
+    local target_keyword = string.lower(conf.keyword or "${keyword}")
     local filtered_finds = {}
-    
     for _, cache in ipairs(finds) do
         if string.find(string.lower(cache.cache_name), target_keyword, 1, true) then
             table.insert(filtered_finds, cache)
@@ -1746,38 +2168,29 @@ function genererCodeLua() {
 `;
         }
 
-        // 6. Assemblage du code Lua final
+        // 3. Assemblage SANS texte en dur (On injecte bien ${filtresLua})
         const luaCode = `-- Checker Project-GC généré pour le Challenge "${keyword || 'Standard'}"
--- Fonctionnalités : Types, Tailles, Géo, D/T, Dates de pose
 
 function Validate(conf)
-    -- On utilise la config du site, ou une valeur par défaut de 20
-    local goal = conf.goal or 20
+    local goal = conf.goal or ${limit}
     local profileId = conf.profileId
     
-    -- Appel API
-    local filter = { types = {"Traditional Cache", "Multi-cache", "Unknown Cache"} }
-    local finds = PGC.GetFinds(profileId, { filter = filter, fields = {'gccode', 'cache_name', 'visitdate'} })
+    -- Appel optimisé à l'API PGC
+    local filter = { 
+        ${filtresLua} 
+    }
     
-    -- Filtrage mot-clé
-    local target_keyword = string.lower(conf.keyword or "château d'eau")
-    local filtered_finds = {}
-    for _, cache in ipairs(finds) do
-        if string.find(string.lower(cache.cache_name), target_keyword, 1, true) then
-            table.insert(filtered_finds, cache)
-        end
-    end
-    finds = filtered_finds
+    local finds = PGC.GetFinds(profileId, { filter = filter, fields = {'gccode', 'cache_name', 'visitdate'} })
+    ${keywordFilterBlock}
     
     local totalFound = #finds
     local isOk = (totalFound >= goal)
     
-    -- Préparation du texte
-    local textLog = "Vous avez trouvé " .. totalFound .. " caches ('" .. target_keyword .. "') sur les " .. goal .. " requises."
+    local txt_kw = "${keyword}" ~= "" and " ('" .. string.lower(conf.keyword or "${keyword}") .. "')" or ""
+    local textLog = "Vous avez trouvé " .. totalFound .. " caches" .. txt_kw .. " sur les " .. goal .. " requises."
     local htmlLog = "<b>Challenge " .. (isOk and "réussi" or "en cours") .. " :</b> " .. totalFound .. " / " .. goal .. " trouvées.<br><br>"
     
-    -- AJOUT DU TABLEAU (La partie PRO)
-    htmlLog = htmlLog .. "<table class='table table-bordered'><tr><th>Code</th><th>Nom</th><th>Date</th></tr>"
+    htmlLog = htmlLog .. "<table class='table table-bordered' style='width:100%; font-size:12px;'><tr><th>Code</th><th>Nom</th><th>Date</th></tr>"
     for _, cache in ipairs(finds) do
         htmlLog = htmlLog .. "<tr><td>" .. cache.gccode .. "</td><td>" .. cache.cache_name .. "</td><td>" .. cache.visitdate .. "</td></tr>"
     end
@@ -1792,7 +2205,7 @@ end`;
 
         afficherResultat(luaCode);
     } catch (e) {
-        alert("Erreur lors de la création du script : " + e.message);
+        alert("Erreur : " + e.message);
     }
 }
 
@@ -1840,4 +2253,11 @@ function copierCodeLua() {
             btn.style.backgroundColor = "#10b981";
         }, 2000);
     });
+}
+
+
+// === FONCTION DE SÉCURITÉ HTML ===
+function escHtml(str) {
+    if (!str) return '';
+    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

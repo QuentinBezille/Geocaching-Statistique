@@ -174,7 +174,83 @@
         </div>
         
     
+            <div class="card card-full">
+            <div class="card-header">
+                <h3>🏆 Exploits & Paliers</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
+                    <button class="tab-btn" onclick="switchExploitsTab('missedFtf')">🔍 FTF Oubliés</button>
+                    <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
+                </div>
+            </div>
+            
+            <div id="tabContent-ftf">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <p class="note" style="margin:0;">Détectés grâce aux tags {*FTF*}, {FTF} ou [FTF] dans vos logs.</p>
+                    <div class="card-badge" id="ftfBadgeTotal" style="margin: 0;">0 FTF</div>
+                </div>
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                    <table class="annual-table" id="ftfTable">
+                        <thead><tr><th style="position:sticky; top:0;">Date</th><th style="position:sticky; top:0;">Code GC</th><th style="position:sticky; top:0;">Nom de la cache</th></tr></thead>
+                        <tbody id="ftfTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
 
+            <div id="tabContent-missedFtf" style="display:none;">
+                <div style="background: var(--bg); padding: 15px; border-radius: 8px; border: 2px dashed #eab308; margin-bottom: 15px;">
+                    <h4 style="color:#ca8a04; margin-top:0; margin-bottom:5px;">🔍 Recherche Hybride (TXT + GPX)</h4>
+                    <p class="note" style="margin-bottom:10px;">Le moteur analyse le nombre de logs et la chronologie pour vous donner un <b>taux de probabilité</b>.</p>
+                    
+                    <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+                        <div style="display:flex; flex:1; min-width: 200px; gap:5px;">
+                            <div class="upload-btn" onclick="document.getElementById('ftfGpxInput').click()" id="ftfGpxBtn" style="flex:1; border-color:#eab308; color:#a16207; background:#fefce8; padding:10px; margin:0; cursor:pointer;">📁 1. GPX (Zone)</div>
+                            <button class="btn-clear-small" onclick="clearSpecific('ftfGpx')" style="margin:0;">🗑️</button>
+                        </div>
+                        <div style="display:flex; flex:1; min-width: 200px; gap:5px;">
+                            <div class="upload-btn" onclick="document.getElementById('ftfTxtInput').click()" id="ftfTxtBtn" style="flex:1; border-color:#eab308; color:#a16207; background:#fefce8; padding:10px; margin:0; cursor:pointer;">📄 2. TXT (Project-GC)</div>
+                            <button class="btn-clear-small" onclick="clearSpecific('ftfTxt')" style="margin:0;">🗑️</button>
+                        </div>
+                    </div>
+                    
+                    <button class="btn-clear-small" style="background:#f59e0b; color:white; border:none; padding:10px; font-weight:bold; cursor:pointer; width:100%; margin-top:10px; border-radius:6px;" onclick="lancerAnalyseFtfOublies()" id="btnLancerFtfOublies">Lancer l'analyse 🕵️</button>
+                    
+                    <input type="file" id="ftfGpxInput" style="display:none" accept=".gpx" onclick="this.value=null;">
+                    <input type="file" id="ftfTxtInput" style="display:none" accept=".txt" onclick="this.value=null;">
+                </div>
+
+                <div style="display:flex; gap:10px; margin-bottom: 15px; flex-wrap:wrap; align-items:center;">
+                    <input type="text" id="searchFtf" placeholder="🔍 Rechercher une cache..." onkeyup="filtrerTableauFtf()" style="flex:2; min-width:150px; padding:8px; border:1px solid #cbd5e1; border-radius:6px;">
+                    <select id="filterProba" onchange="filtrerTableauFtf()" style="flex:1; min-width:150px; padding:8px; border:1px solid #cbd5e1; border-radius:6px; background:white;">
+                        <option value="all">🎯 Toutes probabilités</option>
+                        <option value="high">🔥 Haute (> 70%)</option>
+                        <option value="medium">⚡ Moyenne (30% - 70%)</option>
+                        <option value="low">🧊 Faible (< 30%)</option>
+                    </select>
+                    <div class="card-badge" id="badgeMissedFtfLabel" style="margin:0; background:#ef4444;">0 Oubli(s)</div>
+                </div>
+
+                <div class="table-responsive" style="max-height: 300px; overflow-y: auto; margin-bottom: 15px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <table class="annual-table" id="missedFtfTable" style="margin:0;">
+                        <thead><tr>
+                            <th style="position:sticky; top:0; z-index:2;">Date</th>
+                            <th style="position:sticky; top:0; z-index:2; text-align:center;">Proba.</th>
+                            <th style="position:sticky; top:0; z-index:2;">Code / Nom de la cache</th>
+                        </tr></thead>
+                        <tbody id="missedFtfTableBody"></tbody>
+                    </table>
+                </div>
+
+                <div style="border: 1px solid #e2e8f0; border-radius: 8px; background: var(--bg); overflow: hidden;">
+                    <div onclick="toggleExclus()" style="padding: 10px 15px; background: #f1f5f9; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-weight: bold; color: #475569; font-size: 13px;">
+                        <span>🗑️ Voir les caches exclues (<span id="exclusCount">0</span>)</span>
+                        <span id="chevronExclus">▼</span>
+                    </div>
+                    <div id="exclusContent" style="display: none; padding: 10px; max-height: 250px; overflow-y: auto; font-size: 12px;">
+                        <p style="color: #94a3b8; text-align: center; margin: 5px;">Aucune exclusion pour le moment.</p>
+                    </div>
+                </div>
+            </div>
             <div id="tabContent-milestones" style="display:none;">
                 <div class="milestones-list" id="milestonesList"></div>
             </div>
