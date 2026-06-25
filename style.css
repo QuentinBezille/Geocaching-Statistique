@@ -449,3 +449,45 @@ body.dark-mode .kpi-card .sub-text { color: #cbd5e1 !important; }
 .days-grid { padding: 15px 15px 15px 25px !important; }
 .day-rank { left: -15px !important; top: -15px !important; }
 body.dark-mode .day-card { background: #1e293b !important; border: 1px solid #475569 !important; }
+
+/* ====================================================
+   CORRECTIONS VISUELLES (BADGE, MENU, EXCLUS)
+   ==================================================== */
+
+/* 1. Correction du badge "0 Oubli(s)" pour qu'il soit blanc sur fond rouge, de jour comme de nuit */
+#badgeMissedFtfLabel {
+    background-color: #ef4444 !important;
+    color: #ffffff !important;
+    border: none !important;
+}
+
+/* 2. Menu déroulant (Probabilités) pour qu'il devienne noir en Mode Sombre */
+body.dark-mode select#filterProba {
+    background-color: #0f172a !important;
+    color: #f1f5f9 !important;
+    border-color: #475569 !important;
+}
+
+/* 3. Barre "Voir les caches exclues" pour qu'elle devienne sombre */
+body.dark-mode div[onclick="toggleExclus()"] {
+    background-color: #1e293b !important;
+    color: #f1f5f9 !important;
+    border-bottom: 1px solid #334155 !important;
+}
+
+/* 4. Textes à l'intérieur du tiroir des exclus (Lisibilité en Mode Sombre) */
+body.dark-mode #exclusContent {
+    background-color: #0f172a !important;
+}
+body.dark-mode #exclusContent strong {
+    color: #f1f5f9 !important; /* Nom de la cache en blanc */
+}
+body.dark-mode #exclusContent div {
+    color: #94a3b8 !important; /* Extrait du log en gris clair */
+}
+/* Le petit badge rouge (la raison de l'exclusion) adapté au mode sombre */
+body.dark-mode #exclusContent span[style*="background:#fee2e2"] {
+    background-color: #7f1d1d !important;
+    color: #fecaca !important;
+    border: 1px solid #991b1b !important;
+}
