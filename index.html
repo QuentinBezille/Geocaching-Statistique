@@ -30,55 +30,35 @@
         </div>
     </div>
 
-    <div class="control-panel">
-        
-        <!-- Panneau de gauche : Réglages -->
-        <div class="settings-box">
-            
-            <!-- BLOC PSEUDO -->
-            <div class="input-group">
-                <label>🕵️‍♂️ Pseudo (Filtre) :</label>
-                <input type="text" id="username" placeholder="Entrez votre pseudo exact">
-            </div>
-            
-            <!-- BLOC COORDONNÉES DOMICILE -->
-            <div class="input-group">
-                <label>📍 Coordonnées du Domicile :</label>
-                <div class="input-row">
-                    <input type="text" id="homeCoords" placeholder="Ex: N 48° 01.000 E 002° 01.000">
-                    <button id="btnToggleMap" class="btn-map" style="margin: 0; padding: 8px 12px; background: #3b82f6;">🗺️ Choisir</button>
-                </div>
-                <div class="setting-note">* Coordonnées requises pour le Challenge 360°</div>
-            </div>
-            
-            <!-- CARTE (Cachée par défaut) -->
-            <div id="mapContainer" style="display:none; height: 250px; width: 100%; border-radius: 8px; z-index: 1;"></div>
-            
+<div class="control-panel" style="display: flex; gap: 20px; flex-wrap: wrap;">
+    <div class="settings-box" style="flex: 1; min-width: 250px;">
+        <div class="input-group">
+            <label>🕵️‍♂️ Pseudo :</label>
+            <input type="text" id="username" placeholder="Pseudo">
         </div>
-
-        <!-- Panneau de droite : Uploads -->
-        <div class="upload-section">
-            
-            <!-- BOÎTE 1 : DONNÉES PRINCIPALES (Caches + Labs) -->
-            <div class="upload-box" style="display: flex; flex-direction: column; justify-content: flex-start;">
-                <h3>1. DONNÉES PRINCIPALES</h3>
-                
-                <!-- Ligne GPX -->
-                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                    <div class="upload-btn" onclick="document.getElementById('gpxInput').click()" id="gpxBtn" style="flex:1; margin:0; padding: 15px;">📁 Caches (.gpx)</div>
-                    <button class="btn-clear-small" onclick="clearSpecific('gpx')" title="Vider uniquement le GPX Principal">🗑️</button>
-                </div>
-                <input type="file" id="gpxInput" style="display:none" accept=".gpx">
-                
-                <!-- Ligne Labs -->
-                <div style="display: flex; gap: 8px;">
-                    <div class="upload-btn" onclick="document.getElementById('csvInput').click()" id="csvBtn" style="flex:1; margin:0; padding: 15px;">📁 Labs (.txt)</div>
-                    <button class="btn-clear-small" onclick="clearSpecific('labs')" title="Vider uniquement les Labs">🗑️</button>
-                </div>
-                <input type="file" id="csvInput" style="display:none" accept=".csv, .txt">
+        <div class="input-group">
+            <label>📍 Domicile :</label>
+            <div class="input-row">
+                <input type="text" id="homeCoords" placeholder="N 48°... E 002°...">
+                <button id="btnToggleMap" class="btn-map">🗺️</button>
             </div>
-            
-            <!-- BOÎTE 2 : BROUILLONS (Fusion) -->
+        </div>
+        <div id="mapContainer" style="display:none; height: 150px; width: 100%;"></div>
+    </div>
+
+    <div class="upload-box" style="flex: 1; min-width: 250px; display: flex; flex-direction: column;">
+        <h3>1. DONNÉES PRINCIPALES</h3>
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+            <div class="upload-btn" onclick="document.getElementById('gpxInput').click()" id="gpxBtn" style="flex:1; padding: 15px;">📁 Caches (.gpx)</div>
+            <button class="btn-clear-small" onclick="clearSpecific('gpx')">🗑️</button>
+        </div>
+        <div style="display: flex; gap: 8px;">
+            <div class="upload-btn" onclick="document.getElementById('csvInput').click()" id="csvBtn" style="flex:1; padding: 15px;">📁 Labs (.txt)</div>
+            <button class="btn-clear-small" onclick="clearSpecific('labs')">🗑️</button>
+        </div>
+    </div>
+
+    <!-- BOÎTE 2 : BROUILLONS (Fusion) -->
             <div class="upload-box" style="border: 2px dashed #3b82f6; display: flex; flex-direction: column; justify-content: flex-start;">
                 <h3 style="color:#2563eb;">2. BROUILLONS (FUSION)</h3>
                 
@@ -98,11 +78,12 @@
                 
                 <p id="draftStatus" style="font-size: 11px; margin-top: 5px; margin-bottom: 0; color: #64748b; font-weight: bold; text-align: center;"></p>
             </div>
+</div>
 
-                    
-
-        </div>
-    </div>
+<input type="file" id="gpxInput" style="display:none" accept=".gpx">
+<input type="file" id="csvInput" style="display:none" accept=".txt,.csv">
+<input type="file" id="draftInput" style="display:none" accept=".gpx">
+<input type="file" id="draftTxtInput" style="display:none" accept=".txt">
             
 
     <div class="dashboard" id="dashboard">
@@ -192,44 +173,8 @@
             </div>
         </div>
         
-        <div class="card card-full">
-            <div class="card-header">
-                <h3>🏆 Exploits & Paliers</h3>
-                <div class="tabs" onclick="event.stopPropagation()">
-                    <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
-                    <button class="tab-btn" onclick="switchExploitsTab('missedFtf')">🕵️ FTF Oubliés <span id="badgeMissedFtf" class="card-badge" style="margin-left:5px; background:#fecaca; color:#b91c1c;">0</span></button>
-                    <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
-                </div>
-            </div>
-            
-            <!-- ONGLET 1 : FTF DECLARES -->
-            <div id="tabContent-ftf">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-                    <p class="note" style="margin:0;">Détectés grâce aux tags {*FTF*}, {FTF} ou [FTF] dans vos logs.</p>
-                    <div class="card-badge" id="ftfBadgeTotal" style="margin: 0;">0 FTF</div>
-                </div>
-                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                    <table class="annual-table" id="ftfTable">
-                        <thead><tr><th style="position:sticky; top:0; background:var(--bg);">Date</th><th style="position:sticky; top:0; background:var(--bg);">Code GC</th><th style="position:sticky; top:0; background:var(--bg);">Nom de la cache</th></tr></thead>
-                        <tbody id="ftfTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
+    
 
-            <!-- ONGLET 2 : FTF OUBLIÉS (LE NOUVEAU) -->
-            <div id="tabContent-missedFtf" style="display:none;">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
-                    <p class="note" style="margin:0;">Caches où vous êtes le TOUT PREMIER logueur (hors Reviewer), mais sans tag FTF.</p>
-                </div>
-                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                    <table class="annual-table" id="missedFtfTable">
-                        <thead><tr><th style="position:sticky; top:0; background:var(--bg);">Date</th><th style="position:sticky; top:0; background:var(--bg);">Code GC</th><th style="position:sticky; top:0; background:var(--bg);">Nom de la cache</th></tr></thead>
-                        <tbody id="missedFtfTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- ONGLET 3 : PALIERS -->
             <div id="tabContent-milestones" style="display:none;">
                 <div class="milestones-list" id="milestonesList"></div>
             </div>
@@ -290,7 +235,6 @@
             <div class="chart-container" id="containerMonthly"><canvas id="monthlyChart"></canvas></div>
             <div class="chart-container" id="containerCumul" style="display:none;"><canvas id="cumulativeChart"></canvas></div>
         </div>
-
         <div class="card card-full">
             <div class="card-header">
                 <h3>📦 Détails des Caches</h3>
@@ -306,7 +250,109 @@
             </div>
         </div>
 
-        <div class="card card-full">
+        <div class="card card-full" id="module-generateur">
+    <div class="card-header">
+        <h3>🛠️ Créateur de Checker Project-GC & Badge</h3>
+    </div>
+    
+    <div style="padding: 15px; display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch;">
+        
+        <div style="flex: 1; min-width: 350px; background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid #475569;">
+            <h4 style="margin-top: 0; color: var(--primary);">1. Règles du Challenge (Script)</h4>
+            
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>🎯 Nombre de caches à trouver :</label>
+                <input type="number" id="chkLimit" value="20" min="1" style="width: 100%; padding: 8px; border-radius: 6px;">
+            </div>
+
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>🔤 Mot-clé requis dans le titre (Optionnel) :</label>
+                <input type="text" id="chkKeyword" placeholder="ex: château d'eau" style="width: 100%; padding: 8px; border-radius: 6px;">
+            </div>
+
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>📏 Tailles autorisées :</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 5px; font-size: 0.9em;">
+                    <label><input type="checkbox" class="chk-size" value="Micro" checked> Micro</label>
+                    <label><input type="checkbox" class="chk-size" value="Small" checked> Small</label>
+                    <label><input type="checkbox" class="chk-size" value="Regular" checked> Regular</label>
+                    <label><input type="checkbox" class="chk-size" value="Large" checked> Large</label>
+                    <label><input type="checkbox" class="chk-size" value="Other" checked> Other</label>
+                    <label><input type="checkbox" class="chk-size" value="Virtual" checked> Virtual</label>
+                    <label><input type="checkbox" class="chk-size" value="Not chosen" checked> Not chosen</label>
+                </div>
+            </div>
+
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>🏷️ Types autorisés :</label>
+                <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 5px; margin-top: 5px; font-size: 0.85em;">
+                    <label><input type="checkbox" class="chk-type" value="Traditional Cache" checked> Trad.</label>
+                    <label><input type="checkbox" class="chk-type" value="Multi-cache" checked> Multi</label>
+                    <label><input type="checkbox" class="chk-type" value="Unknown Cache" checked> Mystery</label>
+                    <label><input type="checkbox" class="chk-type" value="Earthcache"> Earth</label>
+                    <label><input type="checkbox" class="chk-type" value="Letterbox Hybrid"> LBH</label>
+                    <label><input type="checkbox" class="chk-type" value="Virtual Cache"> Virtual</label>
+                    <label><input type="checkbox" class="chk-type" value="Wherigo Cache"> Wherigo</label>
+                    <label><input type="checkbox" class="chk-type" value="Webcam Cache"> Webcam</label>
+                    <label><input type="checkbox" class="chk-type" value="Event Cache"> Event</label>
+                    <label><input type="checkbox" class="chk-type" value="Cache In Trash Out Event"> CITO</label>
+                    <label><input type="checkbox" class="chk-type" value="Mega-Event Cache"> Mega</label>
+                    <label><input type="checkbox" class="chk-type" value="Giga-Event Cache"> Giga</label>
+                </div>
+            </div>
+
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>🌍 Zone géo. & Difficulté (Optionnel) :</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px; margin-bottom: 5px;">
+                    <input type="text" id="chkCountry" placeholder="Pays (ex: France)" style="flex: 1; padding: 8px; border-radius: 6px;">
+                    <input type="text" id="chkRegion" placeholder="Région" style="flex: 1; padding: 8px; border-radius: 6px;">
+                </div>
+                <div style="display: flex; gap: 10px;">
+                    <input type="number" id="chkMinD" placeholder="D min" step="0.5" min="1" max="5" style="flex: 1; padding: 8px; border-radius: 6px;">
+                    <input type="number" id="chkMinT" placeholder="T min" step="0.5" min="1" max="5" style="flex: 1; padding: 8px; border-radius: 6px;">
+                </div>
+            </div>
+
+            <div class="input-group" style="margin-bottom: 20px;">
+                <label>📅 Caches posées entre le :</label>
+                <div style="display: flex; gap: 10px; margin-top: 5px; align-items: center;">
+                    <input type="date" id="chkHiddenFrom" style="flex: 1; padding: 8px; border-radius: 6px;">
+                    <span>et</span>
+                    <input type="date" id="chkHiddenTo" style="flex: 1; padding: 8px; border-radius: 6px;">
+                </div>
+            </div>
+
+            <button class="btn-clear-small" style="background:#3b82f6; color:white; border:none; padding:12px; width:100%; font-weight:bold; cursor:pointer; border-radius:8px; margin-bottom: 20px;" onclick="genererCodeLua()">
+                ⚙️ Générer le Script Lua
+            </button>
+
+            <hr style="border-color: #475569; margin: 20px 0;">
+
+            <h4 style="margin-top: 0; color: var(--primary);">2. Badge pour la page Geocaching</h4>
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>📍 Code GC :</label>
+                <input type="text" id="chkGCCode" placeholder="ex: GCA2ZA1" style="width: 100%; padding: 8px; border-radius: 6px;">
+            </div>
+            <div class="input-group" style="margin-bottom: 15px;">
+                <label>🔢 ID Checker :</label>
+                <input type="text" id="chkID" placeholder="ex: 73567" style="width: 100%; padding: 8px; border-radius: 6px;">
+            </div>
+
+            <button class="btn-clear-small" style="background:#8b5cf6; color:white; border:none; padding:12px; width:100%; font-weight:bold; cursor:pointer; border-radius:8px;" onclick="genererBadgeHtml()">
+                🖼️ Générer le lien HTML
+            </button>
+        </div>
+
+        <div style="flex: 1; min-width: 300px; display: flex; flex-direction: column;">
+            <h4 style="margin-top: 0; color: #3b82f6;">3. Résultat à copier</h4>
+            <textarea id="luaOutput" readonly placeholder="Le code généré apparaîtra ici..." style="flex: 1; width: 100%; min-height: 250px; background: #1e293b; color: #10b981; font-family: monospace; padding: 15px; border-radius: 12px; border: 1px solid #475569; resize: none;"></textarea>
+            <button class="btn-clear-small" style="background:#10b981; color:white; border:none; padding:10px; width:100%; margin-top: 10px; font-weight:bold; cursor:pointer; border-radius:8px;" onclick="copierCodeLua()">
+                📋 Copier le résultat
+            </button>
+        </div>
+    </div>
+</div>
+<div class="card card-full">
             <div class="card-header"><h3>🏆 Tableau d'Honneur : Top 50 des journées</h3></div>
             <div class="days-grid" id="daysGrid"></div>
         </div>

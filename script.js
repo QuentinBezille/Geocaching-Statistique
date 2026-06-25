@@ -1433,15 +1433,7 @@ function switchDetailsTab(tab) {
     btns[1].classList.toggle('active', tab === 'sizes');
 }
 
-// === GESTION ONGLET FTF / MILESTONES ===
-function switchExploitsTab(tab) {
-    document.getElementById('tabContent-ftf').style.display = tab === 'ftf' ? 'block' : 'none';
-    document.getElementById('tabContent-milestones').style.display = tab === 'milestones' ? 'block' : 'none';
-    
-    const btns = document.getElementById('tabContent-ftf').parentElement.querySelectorAll('.tab-btn');
-    btns[0].classList.toggle('active', tab === 'ftf');
-    btns[1].classList.toggle('active', tab === 'milestones');
-}
+
 
 // === MODAL MATRICE D/T (Affiche les types de caches au clic) ===
 function ouvrirModalDT(d, t) {
@@ -1485,16 +1477,17 @@ function genererMissedFTFList(missedList) {
     if(tBody) tBody.innerHTML = html;
 }
 
-// === METTRE À JOUR LE GESTIONNAIRE D'ONGLETS EXPLOITS ===
+// === GESTION ONGLET FTF / MILESTONES ===
 function switchExploitsTab(tab) {
     document.getElementById('tabContent-ftf').style.display = tab === 'ftf' ? 'block' : 'none';
-    document.getElementById('tabContent-missedFtf').style.display = tab === 'missedFtf' ? 'block' : 'none';
     document.getElementById('tabContent-milestones').style.display = tab === 'milestones' ? 'block' : 'none';
     
     const btns = document.getElementById('tabContent-ftf').parentElement.querySelectorAll('.tab-btn');
-    btns[0].classList.toggle('active', tab === 'ftf');
-    btns[1].classList.toggle('active', tab === 'missedFtf');
-    btns[2].classList.toggle('active', tab === 'milestones');
+    // On sécurise pour s'assurer que les boutons existent bien
+    if (btns.length >= 2) {
+        btns[0].classList.toggle('active', tab === 'ftf');
+        btns[1].classList.toggle('active', tab === 'milestones');
+    }
 }
 
 // === RACCOURCIS CLAVIER ===
@@ -1635,18 +1628,14 @@ function nettoyerTexteGeocaching(texteBrut) {
     return textePropre.trim() !== "" ? textePropre.trim() : texteBrut.trim();
 }
 
-// === GESTION DU THEME SOMBRE SANS BUG D'AXES ===
+// === GESTION DU THEME SOMBRE (CORRECTION GRAPHIQUES) ===
 function applyTheme(isDark) {
-    if (isDark) {
-        document.body.classList.add('dark-mode');
-    } else {
-        document.body.classList.remove('dark-mode');
-    }
+    if (isDark) { document.body.classList.add('dark-mode'); } 
+    else { document.body.classList.remove('dark-mode'); }
 
     if (typeof Chart !== 'undefined') {
         const textColor = isDark ? '#ffffff' : '#1e293b'; 
         const gridColor = isDark ? '#334155' : '#e2e8f0';
-
         Chart.defaults.color = textColor;
         Chart.defaults.font.size = 13;
 
@@ -1654,47 +1643,28 @@ function applyTheme(isDark) {
             chart.options.color = textColor;
             if (!chart.options.scales) chart.options.scales = {};
 
-            // 1. Uniquement pour les Barres ou Lignes (Évite les numéros 0-11 bizarres sur les ronds !)
-            if (chart.config.type === 'bar' || chart.config.type === 'line') {
-                if (!chart.options.scales.x) chart.options.scales.x = {};
-                if (!chart.options.scales.x.ticks) chart.options.scales.x.ticks = {};
+            if (chart.config.type !== 'polarArea' && chart.config.type !== 'radar') {
+                if (!chart.options.scales.x) chart.options.scales.x = { ticks: {}, grid: {} };
                 chart.options.scales.x.ticks.color = textColor;
-                if (!chart.options.scales.x.grid) chart.options.scales.x.grid = {};
                 chart.options.scales.x.grid.color = gridColor;
 
-                if (!chart.options.scales.y) chart.options.scales.y = {};
-                if (!chart.options.scales.y.ticks) chart.options.scales.y.ticks = {};
+                if (!chart.options.scales.y) chart.options.scales.y = { ticks: {}, grid: {} };
                 chart.options.scales.y.ticks.color = textColor;
-                if (!chart.options.scales.y.grid) chart.options.scales.y.grid = {};
                 chart.options.scales.y.grid.color = gridColor;
-            }
-
-            // 2. Uniquement pour le Radar et PolarArea
-            if (chart.config.type === 'radar' || chart.config.type === 'polarArea') {
-                // On s'assure qu'il n'y a pas d'axe X fantôme
+            } else {
                 if (chart.options.scales.x) delete chart.options.scales.x;
                 if (chart.options.scales.y) delete chart.options.scales.y;
 
-                if (!chart.options.scales.r) chart.options.scales.r = {};
-                if (!chart.options.scales.r.ticks) chart.options.scales.r.ticks = {};
+                if (!chart.options.scales.r) chart.options.scales.r = { ticks: {}, pointLabels: {}, grid: {} };
                 chart.options.scales.r.ticks.color = isDark ? '#ffffff' : '#475569';
                 chart.options.scales.r.ticks.backdropColor = isDark ? '#1e293b' : '#ffffff';
-                
-                if (!chart.options.scales.r.pointLabels) chart.options.scales.r.pointLabels = {};
                 chart.options.scales.r.pointLabels.color = textColor;
                 chart.options.scales.r.pointLabels.font = { size: 14, weight: 'bold' };
-                
-                if (!chart.options.scales.r.grid) chart.options.scales.r.grid = {};
                 chart.options.scales.r.grid.color = gridColor;
             }
 
-            // 3. Légendes
-            if (!chart.options.plugins) chart.options.plugins = {};
-            if (!chart.options.plugins.legend) chart.options.plugins.legend = { labels: {} };
-            if (!chart.options.plugins.legend.labels) chart.options.plugins.legend.labels = {};
+            if (!chart.options.plugins) chart.options.plugins = { legend: { labels: {} } };
             chart.options.plugins.legend.labels.color = textColor;
-            chart.options.plugins.legend.labels.font = { size: 13, weight: 'bold' };
-
             chart.update();
         });
     }
@@ -1712,47 +1682,162 @@ window.addEventListener('load', () => {
     applyTheme(isDark);
 });
 
-function detecterFtfOublies(xmlString) {
-    const parser = new DOMParser();
-    const xml = parser.parseFromString(xmlString, "text/xml");
-    const wpts = xml.getElementsByTagName("wpt");
-    let missedFtfList = [];
 
-    for (let wpt of wpts) {
-        const cache = wpt.getElementsByTagNameNS("*", "cache")[0];
-        if (!cache) continue;
 
-        const logs = wpt.getElementsByTagNameNS("*", "log");
-        let validLogs = [];
+// =====================================================================
+// === MODULE GÉNÉRATEUR DE CHECKER PROJECT-GC =========================
+// =====================================================================
 
-        for (let log of logs) {
-            const type = log.getElementsByTagNameNS("*", "type")[0].textContent;
-            if (type === "Publish Listing") continue; // On ignore le reviewer
+function genererCodeLua() {
+    try {
+        const limit = parseInt(document.getElementById('chkLimit').value) || 1;
+        const keyword = document.getElementById('chkKeyword')?.value.trim();
+        
+        // 1. Récupération des Types (S'adapte automatiquement au HTML)
+        const typeCheckboxes = document.querySelectorAll('.chk-type:checked');
+        const types = Array.from(typeCheckboxes).map(cb => `"${cb.value}"`);
+        if (types.length === 0) { alert("Sélectionnez au moins un type de cache !"); return; }
 
-            const finder = log.getElementsByTagNameNS("*", "finder")[0].textContent.trim();
-            const logId = parseInt(log.getAttribute("id"), 10);
-            const text = (log.getElementsByTagNameNS("*", "text")[0]?.textContent || "").toLowerCase();
-            
-            // On ne prend que les Found It ou les notes qui réclament le FTF
-            if (type === "Found it" || (type === "Write note" && text.includes("ftf"))) {
-                validLogs.push({ finder, logId, text });
-            }
+        // 2. Récupération des Tailles
+        const sizeCheckboxes = document.querySelectorAll('.chk-size:checked');
+        const sizes = Array.from(sizeCheckboxes).map(cb => `"${cb.value}"`);
+
+        // 3. Récupération des autres champs optionnels
+        const country = document.getElementById('chkCountry')?.value.trim();
+        const region = document.getElementById('chkRegion')?.value.trim();
+        const minD = parseFloat(document.getElementById('chkMinD')?.value);
+        const minT = parseFloat(document.getElementById('chkMinT')?.value);
+        const hiddenFrom = document.getElementById('chkHiddenFrom')?.value;
+        const hiddenTo = document.getElementById('chkHiddenTo')?.value;
+
+        // 4. Construction intelligente du filtre API Project-GC
+        let filtresArray = [];
+        filtresArray.push(`types = {${types.join(', ')}}`);
+        
+        // On n'envoie les tailles à PGC que si on ne les veut pas toutes (optimisation serveur)
+        if (sizes.length > 0 && sizes.length < document.querySelectorAll('.chk-size').length) {
+            filtresArray.push(`sizes = {${sizes.join(', ')}}`);
+        }
+        
+        // Ajout des filtres géographiques et D/T si renseignés
+        if (country) filtresArray.push(`countries = {"${country}"}`);
+        if (region) filtresArray.push(`regions = {"${region}"}`);
+        if (!isNaN(minD)) filtresArray.push(`difficulty = {min = ${minD}}`);
+        if (!isNaN(minT)) filtresArray.push(`terrain = {min = ${minT}}`);
+        if (hiddenFrom) filtresArray.push(`hidden_fromdate = "${hiddenFrom}"`);
+        if (hiddenTo) filtresArray.push(`hidden_todate = "${hiddenTo}"`);
+
+        const filtresLua = filtresArray.join(',\n        ');
+
+        // 5. Bloc de filtrage par mot-clé (S'ajoute uniquement si un mot est tapé)
+        let keywordFilterBlock = "";
+        if (keyword) {
+            keywordFilterBlock = `
+    -- Filtrage additionnel par mot-clé dans le nom (insensible à la casse)
+    local target_keyword = string.lower("${keyword}")
+    local filtered_finds = {}
+    
+    for _, cache in ipairs(finds) do
+        if string.find(string.lower(cache.cache_name), target_keyword, 1, true) then
+            table.insert(filtered_finds, cache)
+        end
+    end
+    finds = filtered_finds
+`;
         }
 
-        // Tri chronologique par ID
-        validLogs.sort((a, b) => a.logId - b.logId);
+        // 6. Assemblage du code Lua final
+        const luaCode = `-- Checker Project-GC généré pour le Challenge "${keyword || 'Standard'}"
+-- Fonctionnalités : Types, Tailles, Géo, D/T, Dates de pose
 
-        // Si le premier log est Letintin45 et qu'il n'a pas mis le tag FTF
-        if (validLogs.length > 0 && validLogs[0].finder === "Letintin45") {
-            if (!validLogs[0].text.includes("ftf")) {
-                missedFtfList.push({
-                    gcCode: wpt.getElementsByTagNameNS("*", "name")[0].textContent,
-                    name: cache.getElementsByTagNameNS("*", "name")[0].textContent,
-                    date: validLogs[0].date // à extraire proprement
-                });
-            }
-        }
+function Validate(conf)
+    -- On utilise la config du site, ou une valeur par défaut de 20
+    local goal = conf.goal or 20
+    local profileId = conf.profileId
+    
+    -- Appel API
+    local filter = { types = {"Traditional Cache", "Multi-cache", "Unknown Cache"} }
+    local finds = PGC.GetFinds(profileId, { filter = filter, fields = {'gccode', 'cache_name', 'visitdate'} })
+    
+    -- Filtrage mot-clé
+    local target_keyword = string.lower(conf.keyword or "château d'eau")
+    local filtered_finds = {}
+    for _, cache in ipairs(finds) do
+        if string.find(string.lower(cache.cache_name), target_keyword, 1, true) then
+            table.insert(filtered_finds, cache)
+        end
+    end
+    finds = filtered_finds
+    
+    local totalFound = #finds
+    local isOk = (totalFound >= goal)
+    
+    -- Préparation du texte
+    local textLog = "Vous avez trouvé " .. totalFound .. " caches ('" .. target_keyword .. "') sur les " .. goal .. " requises."
+    local htmlLog = "<b>Challenge " .. (isOk and "réussi" or "en cours") .. " :</b> " .. totalFound .. " / " .. goal .. " trouvées.<br><br>"
+    
+    -- AJOUT DU TABLEAU (La partie PRO)
+    htmlLog = htmlLog .. "<table class='table table-bordered'><tr><th>Code</th><th>Nom</th><th>Date</th></tr>"
+    for _, cache in ipairs(finds) do
+        htmlLog = htmlLog .. "<tr><td>" .. cache.gccode .. "</td><td>" .. cache.cache_name .. "</td><td>" .. cache.visitdate .. "</td></tr>"
+    end
+    htmlLog = htmlLog .. "</table>"
+    
+    return {
+        ok = isOk,
+        log = textLog,
+        html = htmlLog
     }
-    return missedFtfList;
+end`;
+
+        afficherResultat(luaCode);
+    } catch (e) {
+        alert("Erreur lors de la création du script : " + e.message);
+    }
 }
 
+function genererBadgeHtml() {
+    const gcCode = document.getElementById('chkGCCode').value.trim();
+    const checkerId = document.getElementById('chkID').value.trim();
+
+    if (!gcCode || !checkerId) {
+        alert("⚠️ Vous devez indiquer le Code GC de votre cache et l'ID du Checker pour générer le badge.");
+        return;
+    }
+
+    const htmlCode = `<a href="https://project-gc.com/Challenges/${gcCode}/${checkerId}">
+    <img alt="PGC Checker" src="https://cdn2.project-gc.com/Images/Checker/${checkerId}" title="Project-GC Challenge checker">
+</a>`;
+
+    afficherResultat(htmlCode);
+}
+
+function afficherResultat(texte) {
+    const output = document.getElementById('luaOutput');
+    output.value = texte;
+    
+    // Animation de succès
+    output.style.borderColor = "#10b981";
+    output.style.boxShadow = "0 0 10px rgba(16, 185, 129, 0.5)";
+    setTimeout(() => { 
+        output.style.borderColor = "#475569"; 
+        output.style.boxShadow = "none";
+    }, 800);
+}
+
+function copierCodeLua() {
+    const output = document.getElementById('luaOutput');
+    if (!output.value) return;
+    
+    navigator.clipboard.writeText(output.value).then(() => {
+        const btn = event.target;
+        const txtOriginal = btn.innerText;
+        btn.innerText = "✅ Copié !";
+        btn.style.backgroundColor = "#059669";
+        
+        setTimeout(() => {
+            btn.innerText = txtOriginal;
+            btn.style.backgroundColor = "#10b981";
+        }, 2000);
+    });
+}

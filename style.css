@@ -394,3 +394,58 @@ body.dark-mode .dt-cell { font-size: 14px !important; }
 
 /* Mode Sombre pour le tableau des FTF Oubliés */
 body.dark-mode #missedFtfTable th { background: #334155 !important; color: #fbbf24 !important; }
+
+/* =========================================
+   MODE SOMBRE MASTER & CORRECTIONS UI
+   ========================================= */
+
+body.dark-mode {
+    --bg: #0f172a;
+    --card: #1e293b;
+    --text-main: #f1f5f9;
+    --text-muted: #94a3b8;
+    background-color: var(--bg) !important;
+    color: var(--text-main) !important;
+}
+
+body.dark-mode .header-top, body.dark-mode .card, body.dark-mode .kpi-card,
+body.dark-mode .upload-box, body.dark-mode .settings-box, body.dark-mode .modal-content,
+body.dark-mode .chart-container, body.dark-mode #calendar { 
+    background-color: var(--card) !important; 
+    border-color: #334155 !important; 
+    color: var(--text-main) !important;
+}
+
+/* Force les boîtes jaunes/bleues en mode sombre */
+body.dark-mode div[style*="background: var(--bg)"], 
+body.dark-mode div[style*="background:#fefce8"] { 
+    background-color: #0f172a !important; 
+    border-color: #475569 !important; 
+}
+
+/* Textes, Boutons et Onglets */
+body.dark-mode h1, body.dark-mode h2, body.dark-mode h3, body.dark-mode h4, body.dark-mode p, body.dark-mode label { color: var(--text-main) !important; }
+body.dark-mode .note { color: #94a3b8 !important; }
+body.dark-mode .tab-btn { background: #0f172a !important; border-color: #334155 !important; color: #94a3b8 !important; }
+body.dark-mode .tab-btn.active { background: var(--primary) !important; color: white !important; border-color: var(--primary-dark) !important; }
+
+/* Sliders et Tableaux */
+input[type="range"] { accent-color: #059669; cursor: pointer; }
+body.dark-mode input[type="range"] { accent-color: #fbbf24 !important; background-color: transparent !important; }
+body.dark-mode table, body.dark-mode th, body.dark-mode td { background-color: var(--card) !important; color: var(--text-main) !important; border-color: #334155 !important; }
+body.dark-mode .annual-table th, body.dark-mode #missedFtfTable th, body.dark-mode #ftfTable th { background: #334155 !important; color: #fbbf24 !important; }
+body.dark-mode .grid-366 { background-color: transparent !important; }
+body.dark-mode .grid-366 td { border: 1px solid #475569 !important; }
+body.dark-mode .grid-366 .invalid { background-color: #0f172a !important; }
+
+/* Flexbox pour des cartes KPI symétriques et centrées */
+.kpi-grid { align-items: stretch; }
+.kpi-card { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; height: 100%; box-sizing: border-box; padding: 15px 5px 12px 5px; }
+.kpi-card h4 { min-height: 26px !important; margin-bottom: 10px; display: flex; align-items: center; text-align: center; }
+.kpi-card .sub-text { margin-top: auto !important; padding-top: 8px !important; font-size: 13px !important; font-weight: 700 !important; }
+body.dark-mode .kpi-card .sub-text { color: #cbd5e1 !important; }
+
+/* Top 50 qui respire */
+.days-grid { padding: 15px 15px 15px 25px !important; }
+.day-rank { left: -15px !important; top: -15px !important; }
+body.dark-mode .day-card { background: #1e293b !important; border: 1px solid #475569 !important; }
