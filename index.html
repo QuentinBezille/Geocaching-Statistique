@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Geocaching Master Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://www.gstatic.com/charts/loader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
@@ -30,8 +31,8 @@
         </div>
     </div>
 
-<div class="control-panel" style="display: flex; gap: 20px; flex-wrap: wrap;">
-    <div class="settings-box" style="flex: 1; min-width: 250px;">
+<div class="control-panel">
+    <div class="settings-box">
         <div class="input-group">
             <label>🕵️‍♂️ Pseudo :</label>
             <input type="text" id="username" placeholder="Pseudo">
@@ -46,48 +47,72 @@
         <div id="mapContainer" style="display:none; height: 150px; width: 100%;"></div>
     </div>
 
-    <div class="upload-box" style="flex: 1; min-width: 250px; display: flex; flex-direction: column;">
-        <h3>1. DONNÉES PRINCIPALES</h3>
-        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-            <div class="upload-btn" onclick="document.getElementById('gpxInput').click()" id="gpxBtn" style="flex:1; padding: 15px;">📁 Caches (.gpx)</div>
-            <button class="btn-clear-small" onclick="clearSpecific('gpx')">🗑️</button>
+    <div class="upload-section-wrapper">
+        <div class="upload-box" style="display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;">1. DONNÉES PRINCIPALES</h3>
+                <button onclick="toggleAide('aideUploadPrincipal')" class="btn-aide">❓</button>
+            </div>
+            <div id="aideUploadPrincipal" class="aide-box" style="display:none; text-align:left;">
+                <strong>🛠️ Comment obtenir ces fichiers ?</strong>
+                <ol>
+                    <li><b>Caches (.gpx)</b> : sur Geocaching.com, va dans <i>Mon Profil → Mes Caches Trouvées</i> et lance l'export "My Finds" (Pocket Query), ou utilise Project-GC (Tools → My Finds → Export GPX). Télécharge le fichier .gpx puis charge-le ici.</li>
+                    <li><b>Labs (.txt)</b> : sur Geocaching.com, va sur la page de tes statistiques Adventure Lab, copie la liste de tes labs trouvés dans un fichier .txt.</li>
+                </ol>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px; margin-top:10px;">
+                <div class="upload-btn" onclick="document.getElementById('gpxInput').click()" id="gpxBtn" style="flex:1; padding:14px;">📁 Caches (.gpx)</div>
+                <button class="btn-clear-small" onclick="clearSpecific('gpx')">🗑️</button>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <div class="upload-btn" onclick="document.getElementById('csvInput').click()" id="csvBtn" style="flex:1; padding:14px;">📁 Labs (.txt)</div>
+                <button class="btn-clear-small" onclick="clearSpecific('labs')">🗑️</button>
+            </div>
         </div>
-        <div style="display: flex; gap: 8px;">
-            <div class="upload-btn" onclick="document.getElementById('csvInput').click()" id="csvBtn" style="flex:1; padding: 15px;">📁 Labs (.txt)</div>
-            <button class="btn-clear-small" onclick="clearSpecific('labs')">🗑️</button>
+
+        <div class="upload-box" style="border:2px dashed #3b82f6; display:flex; flex-direction:column;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0; color:#2563eb;">2. BROUILLONS (FUSION)</h3>
+                <button onclick="toggleAide('aideUploadBrouillons')" class="btn-aide">❓</button>
+            </div>
+            <div id="aideUploadBrouillons" class="aide-box" style="display:none; text-align:left;">
+                <strong>🛠️ À quoi servent les brouillons ?</strong>
+                <ol>
+                    <li>Cette section permet de fusionner des trouvailles très récentes (pas encore dans ton export GPX officiel) grâce à un export "brouillon" : un .txt de logs Project-GC <i>et/ou</i> un petit .gpx exporté manuellement pour la zone récente.</li>
+                    <li>Charge le .txt en 1, puis le .gpx en 2 : le dashboard fusionne automatiquement ces données fraîches avec tes données principales pour ne rien perdre en attendant ton prochain export complet.</li>
+                </ol>
+            </div>
+            <div style="display:flex; gap:8px; margin-bottom:8px; margin-top:10px;">
+                <div class="upload-btn" onclick="document.getElementById('draftTxtInput').click()" id="draftTxtBtn" style="flex:1; padding:14px; border-color:#8b5cf6; color:#7c3aed; background:#f5f3ff;">📄 1. .txt brouillons</div>
+                <button class="btn-clear-small" onclick="clearSpecific('draftTxt')">🗑️</button>
+            </div>
+            <input type="file" id="draftTxtInput" style="display:none" accept=".txt">
+            <div style="display:flex; gap:8px;">
+                <div class="upload-btn" onclick="document.getElementById('draftInput').click()" id="draftBtn" style="flex:1; padding:14px; border-color:#3b82f6; color:#2563eb; background:#eff6ff;">📁 2. .gpx brouillon</div>
+                <button class="btn-clear-small" onclick="clearSpecific('draftGpx')">🗑️</button>
+            </div>
+            <input type="file" id="draftInput" style="display:none" accept=".gpx">
+            <p id="draftStatus" style="font-size:11px; margin-top:6px; margin-bottom:0; color:#64748b; font-weight:bold; text-align:center;"></p>
         </div>
     </div>
-
-    <!-- BOÎTE 2 : BROUILLONS (Fusion) -->
-            <div class="upload-box" style="border: 2px dashed #3b82f6; display: flex; flex-direction: column; justify-content: flex-start;">
-                <h3 style="color:#2563eb;">2. BROUILLONS (FUSION)</h3>
-                
-                <!-- Ligne TXT -->
-                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                    <div class="upload-btn" onclick="document.getElementById('draftTxtInput').click()" id="draftTxtBtn" style="flex:1; margin:0; padding: 15px; border-color:#8b5cf6; color:#7c3aed; background:#f5f3ff;">📄 1. Charger le .txt de tes brouillons</div>
-                    <button class="btn-clear-small" onclick="clearSpecific('draftTxt')" title="Vider le fichier TXT des brouillons">🗑️</button>
-                </div>
-                <input type="file" id="draftTxtInput" style="display:none" accept=".txt">
-                
-                <!-- Ligne GPX Brouillons -->
-                <div style="display: flex; gap: 8px;">
-                    <div class="upload-btn" onclick="document.getElementById('draftInput').click()" id="draftBtn" style="flex:1; margin:0; padding: 15px; border-color:#3b82f6; color:#2563eb; background:#eff6ff;">📁 2. Charger le .gpx de ta liste brouillon</div>
-                    <button class="btn-clear-small" onclick="clearSpecific('draftGpx')" title="Vider le fichier GPX des brouillons">🗑️</button>
-                </div>
-                <input type="file" id="draftInput" style="display:none" accept=".gpx">
-                
-                <p id="draftStatus" style="font-size: 11px; margin-top: 5px; margin-bottom: 0; color: #64748b; font-weight: bold; text-align: center;"></p>
-            </div>
 </div>
 
-<input type="file" id="gpxInput" style="display:none" accept=".gpx">
-<input type="file" id="csvInput" style="display:none" accept=".txt,.csv">
-<input type="file" id="draftInput" style="display:none" accept=".gpx">
-<input type="file" id="draftTxtInput" style="display:none" accept=".txt">
+<input type="file" id="gpxInput" style="display:none" accept=".gpx" onclick="this.value=null;">
+<input type="file" id="csvInput" style="display:none" accept=".txt,.csv" onclick="this.value=null;">
+
+<div class="main-tabs-bar" id="mainTabsBar">
+    <button class="main-tab-btn active" onclick="switchMainTab('overview')">📊 Vue d'ensemble</button>
+    <button class="main-tab-btn" onclick="switchMainTab('calendar')">🗓️ Calendrier</button>
+    <button class="main-tab-btn" onclick="switchMainTab('matrix')">🎯 Matrice &amp; Habitudes</button>
+    <button class="main-tab-btn" onclick="switchMainTab('maps')">🗺️ Cartes</button>
+    <button class="main-tab-btn" onclick="switchMainTab('ftf')">🏆 FTF &amp; Paliers</button>
+    <button class="main-tab-btn" onclick="switchMainTab('challenge360')">🧭 Challenge 360</button>
+    <button class="main-tab-btn" onclick="switchMainTab('tools')">🛠️ Outils</button>
+</div>
             
 
     <div class="dashboard" id="dashboard">
-        
+
         <div class="summary-card">
             <div class="summary-text" id="summaryText"></div>
             <div class="search-bar">
@@ -109,14 +134,74 @@
             <div class="kpi-card"><h4>🏆 Meilleure année</h4><div class="value" id="kpiBestYear">0</div><div class="sub-text" id="kpiBestYearDate">-</div></div>
         </div>
 
+        <div class="main-tab-panel" id="panel-overview">
+
+        <div class="card card-full">
+            <div class="card-header"><h3>📈 Répartition annuelle</h3></div>
+            <table class="annual-table" id="annualTable"></table>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>📊 Évolution des découvertes</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchChartTab('monthly')">Par mois (Détail)</button>
+                    <button class="tab-btn" onclick="switchChartTab('cumul')">Cumulatif</button>
+                </div>
+            </div>
+            <div class="chart-container" id="containerMonthly"><canvas id="monthlyChart"></canvas></div>
+            <div class="chart-container" id="containerCumul" style="display:none;"><canvas id="cumulativeChart"></canvas></div>
+        </div>
+
+        <div class="card card-full">
+            <div class="card-header">
+                <h3>📦 Détails des Caches</h3>
+                <div class="tabs" onclick="event.stopPropagation()">
+                    <button class="tab-btn active" onclick="switchDetailsTab('types')">Types de caches</button>
+                    <button class="tab-btn" onclick="switchDetailsTab('sizes')">Tailles des contenants</button>
+                </div>
+            </div>
+            <div class="chart-container" id="containerTypes"><canvas id="typeChart"></canvas></div>
+            <div id="containerSizes" style="display:none;">
+                <div class="chart-container"><canvas id="sizeChart"></canvas></div>
+                <p class="note" style="text-align:center; margin-top:5px;"><i>* Les Lab Caches ne sont pas intégrées dans ce graphique.</i></p>
+            </div>
+        </div>
+
+        </div><!-- /panel-overview -->
+
+        <div class="main-tab-panel" id="panel-calendar" style="display:none;">
+
         <div class="card card-full" id="calendar-container">
             <div class="card-header">
                 <h3>📅 Agenda des découvertes</h3>
             </div>
             <div id="calendar"></div>
         </div>
-
         <div class="card card-full">
+            <div class="card-header">
+                <h3>🗓️ Calendrier des 366 Jours</h3>
+                <div style="display:flex; align-items:center; gap:10px; margin-left:auto;" onclick="event.stopPropagation()">
+                    <div class="card-badge" id="jours366Badge">0/366</div>
+                    <button onclick="toggleAide('aideGrid366')" class="btn-aide">❓ Aide</button>
+                </div>
+            </div>
+            <div id="aideGrid366" class="aide-box" style="display:none;">
+                <strong>🛠️ Comment lire ce calendrier ?</strong>
+                <ol>
+                    <li>Chaque case représente un <b>jour de l'année</b> (1er janvier au 31 décembre, 366 jours pour couvrir les années bissextiles), toutes années confondues.</li>
+                    <li>Le chiffre = nombre total de caches trouvées ce jour-là, peu importe l'année. Plus la case est foncée, plus tu as trouvé de caches ce jour calendaire.</li>
+                    <li><b>Clique sur une case</b> pour voir le détail année par année de ce jour précis (ex : tous les 14 juillet de toutes les années).</li>
+                    <li>L'objectif "0/366" se complète quand tu as trouvé au moins une cache à chaque jour calendaire de l'année.</li>
+                </ol>
+            </div>
+            <div id="grid366Text" style="margin-bottom: 10px; font-weight: 600; color: var(--text-muted);"></div>
+            <div class="progress-container"><div class="progress-bar" id="jours366Progress" style="width: 0%;"></div></div>
+            <div class="grid-366-wrapper" id="grid366Container"></div>
+        </div>
+        </div><!-- /panel-calendar -->
+
+        <div class="main-tab-panel" id="panel-challenge360" style="display:none;">
             <div class="card card-full">
             <div class="card-header">
                 <h3>🧭 Challenge 360 Degrés (Premium)</h3>
@@ -127,7 +212,17 @@
                         <button class="tab-btn" onclick="switch360Tab('table')">Table</button>
                         <button class="tab-btn" onclick="switch360Tab('carte')">Carte Sectorielle</button>
                     </div>
+                    <button onclick="toggleAide('aide360')" class="btn-aide">❓ Aide</button>
                 </div>
+            </div>
+            <div id="aide360" class="aide-box" style="display:none;">
+                <strong>🛠️ Comprendre le Challenge 360°</strong>
+                <ol>
+                    <li>Renseigne ton <b>Domicile</b> en haut de page (coordonnées GPS) : c'est le centre à partir duquel les 360 secteurs (1 par degré d'azimut) sont calculés.</li>
+                    <li>Charge ton fichier <b>Caches (.gpx)</b> (section "1. Données principales") : chaque cache trouvée est classée dans le secteur correspondant à sa direction par rapport à ton domicile.</li>
+                    <li>Utilise le curseur "Objectif" pour définir combien de caches minimum tu veux par secteur (1 à 15) pour le considérer comme "complété".</li>
+                    <li>L'onglet <b>Carte Sectorielle</b> affiche visuellement les caches d'un secteur donné ; coche "Tout voir" pour les afficher tous en même temps (zoom minimum requis).</li>
+                </ol>
             </div>
             
             <!-- NOUVEL EMPLACEMENT DU CURSEUR (Max 15) -->
@@ -147,6 +242,12 @@
                         <div id="missingSectorsList" class="missing-sectors-list"></div>
                     </div>
                 </div>
+
+                <div style="margin-top:24px; padding-top:18px; border-top:1px solid var(--border, #e2e8f0);">
+                    <h4 style="margin:0 0 4px; color:var(--text-main); font-weight:800;">🌍 Résumé par pays</h4>
+                    <p class="note" style="margin:0 0 12px;">Pour chaque pays, le même principe de secteurs d'azimut, mais filtré sur les caches de ce pays uniquement (toujours calculé depuis ton Domicile).</p>
+                    <div id="resumeParPaysContainer" class="pays-resume-grid"></div>
+                </div>
             </div>
             <div id="tab360-table" style="display:none; max-height: 400px; overflow-y: auto; margin-top: 15px;">
                 <table class="annual-table" id="table360">
@@ -154,44 +255,158 @@
                         <th onclick="sortTable360(0)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">Azimut ⬍</th>
                         <th onclick="sortTable360(1)" style="cursor:pointer; background:var(--bg); position:sticky; top:0;">#Trouvées ⬍</th>
                         <th style="text-align:left; background:var(--bg); position:sticky; top:0;">Caches trouvées (Max 15)</th>
+                    </tr></thead>
                     <tbody id="tbody360"></tbody>
                 </table>
             </div>
             <div id="tab360-carte" style="display:none; position:relative; height: 500px; width: 100%; border-radius: 8px; margin-top: 15px; border: 2px solid #e2e8f0; z-index: 1; overflow: hidden;">
-                <div id="mapPremiumControls" style="position:absolute; top:10px; right:10px; z-index:1000; background:rgba(255,255,255,0.95); padding:12px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.2); border: 1px solid #cbd5e1; width: 150px; box-sizing: border-box;">
-                    <div style="margin-bottom: 8px;">
+                <div id="mapPremiumControls" style="position:absolute; top:10px; right:10px; z-index:1000; background:rgba(255,255,255,0.95); padding:12px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.2); border: 1px solid #cbd5e1; width: 160px; box-sizing: border-box;">
+                    <div id="sectorSelectorWrapper" style="margin-bottom: 8px;">
                         <label style="font-weight:bold; font-size:12px; color:#1e293b; display:block;">Secteur affiché (°):</label>
                         <input type="number" id="mapSectorSelector" min="0" max="359" value="0" style="width: 100px; padding:5px; border-radius:4px; border:1px solid #cbd5e1;" oninput="updateMapPremium()">
                     </div>
                     <div style="border-top: 1px solid #e2e8f0; padding-top: 5px;">
                         <label style="font-size: 12px; font-weight: bold; color: #1e293b; cursor: pointer;">
-                            <input type="checkbox" id="showAllSectors" onchange="updateMapPremium()" style="margin-right: 5px;"> Tout voir (360°)
+                            <input type="checkbox" id="showAllSectors" onchange="mapAutoFitDone=false; document.getElementById('sectorSelectorWrapper').style.display = this.checked ? 'none' : 'block'; document.getElementById('map360Legend').style.display = this.checked ? 'flex' : 'none'; updateMapPremium()" style="margin-right: 5px;"> Tout voir (360°)
                         </label>
                     </div>
                     <div id="zoomWarning" style="color:#ef4444; font-size:11px; margin-top:5px; display:none; font-weight:bold;">⚠️ Zoom min 10 requis</div>
                 </div>
+                <div id="map360Legend" style="display:none; position:absolute; bottom:10px; left:10px; z-index:1000; background:rgba(255,255,255,0.95); padding:8px 12px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.2); border:1px solid #cbd5e1; font-size:12px; font-weight:bold; color:#1e293b; gap:14px;">
+                    <span style="display:inline-flex; align-items:center; gap:5px;"><span style="display:inline-block;width:16px;height:3px;background:#10b981;"></span> Secteur avec trouvaille(s)</span>
+                    <span style="display:inline-flex; align-items:center; gap:5px;"><span style="display:inline-block;width:16px;height:3px;background:#ef4444;"></span> Secteur vide</span>
+                </div>
             </div>
         </div>
-        
-    
+        </div><!-- /panel-challenge360 -->
+
+        <div class="main-tab-panel" id="panel-ftf" style="display:none;">
             <div class="card card-full">
             <div class="card-header">
                 <h3>🏆 Exploits & Paliers</h3>
-                <div class="tabs" onclick="event.stopPropagation()">
-                    <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
-                    <button class="tab-btn" onclick="switchExploitsTab('missedFtf')">🔍 FTF Oubliés</button>
-                    <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
+                <div style="display:flex; align-items:center; gap:10px; margin-left:auto;" onclick="event.stopPropagation()">
+                    <div class="tabs">
+                        <button class="tab-btn active" onclick="switchExploitsTab('ftf')">🥇 Liste des FTF</button>
+                        <button class="tab-btn" onclick="switchExploitsTab('missedFtf')">🔍 FTF Oubliés</button>
+                        <button class="tab-btn" onclick="switchExploitsTab('milestones')">🎖️ Paliers Atteints</button>
+                    </div>
+                    <button onclick="toggleAide('aideExploits')" class="btn-aide">❓ Aide</button>
                 </div>
+            </div>
+            <div id="aideExploits" class="aide-box" style="display:none;">
+                <strong>🛠️ Comprendre cette section</strong>
+                <ol>
+                    <li><b>🥇 Liste des FTF</b> : détecte automatiquement tes FTF (First To Find) officiels grâce aux tags <code>{*FTF*}</code>, <code>{FTF}</code> ou <code>[FTF]</code> présents dans tes logs du fichier <b>Caches (.gpx)</b>.</li>
+                    <li><b>🔍 FTF Oubliés</b> : un moteur séparé (voir son propre bouton ❓ dans cet onglet) détecte les FTF que tu as probablement faits mais oublié de tagger — il a besoin de fichiers spécifiques (GPX zone + TXT Project-GC).</li>
+                    <li><b>🎖️ Paliers Atteints</b> : affiche les jalons (100, 500, 1000... caches trouvées) avec la date et la cache qui a permis de les atteindre.</li>
+                </ol>
             </div>
             
             <div id="tabContent-ftf">
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
                     <p class="note" style="margin:0;">Détectés grâce aux tags {*FTF*}, {FTF} ou [FTF] dans vos logs.</p>
-                    <div class="card-badge" id="ftfBadgeTotal" style="margin: 0;">0 FTF</div>
+                    <div class="card-badge" id="ftfBadgeTotal" style="margin: 0; font-size: 14px;">0 FTF</div>
                 </div>
-                <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
-                    <table class="annual-table" id="ftfTable">
-                        <thead><tr><th style="position:sticky; top:0;">Date</th><th style="position:sticky; top:0;">Code GC</th><th style="position:sticky; top:0;">Nom de la cache</th></tr></thead>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">📊 Quelques chiffres</h4>
+                <div style="background: var(--bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px; font-size: 13px;">
+                    <table style="width: 100%; text-align: left; border-collapse: collapse;">
+                        <tbody id="ftfStatsTableBody"></tbody>
+                    </table>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🗺️ Carte des FTF par région</h4>
+                <div style="margin-bottom: 20px;">
+                    <div id="map_ftf_dynamic" style="width: 100%; height: 420px; border-radius: 12px; border: 1px solid var(--border); overflow:hidden; background:#dbeafe;"></div>
+                    <div class="map-legend map-legend-ftf" style="margin-top:10px;">
+                        <span>Peu</span>
+                        <div class="map-legend-bar map-legend-bar-ftf"></div>
+                        <span>Beaucoup</span>
+                    </div>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">📅 FTFs par date de trouvaille</h4>
+                <div id="ftfGrid366Text" style="margin-bottom: 10px; font-size: 13px; font-weight: 600; color: var(--text-muted); text-align: center;"></div>
+                <div class="table-responsive" style="margin-bottom: 20px; overflow-x: auto;">
+                    <div id="ftfGrid366Container" style="min-width: 800px;"></div>
+                </div>
+
+                <div style="display:flex; gap:20px; flex-wrap:wrap; margin-bottom:20px;">
+                    <div style="flex:1; min-width:300px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">📍 Premier FTF par emplacement</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;">
+                            <thead><tr><th>#</th><th>Date</th><th>Emplacement</th><th>Code</th><th>Type</th><th style="text-align:left;">Nom</th></tr></thead>
+                            <tbody id="ftfLocBody"></tbody>
+                        </table>
+                    </div>
+                    <div style="flex:1; min-width:300px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">🏷️ Premier FTF par type</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;">
+                            <thead><tr><th>#</th><th>Date</th><th>Pays</th><th>Code</th><th>Type</th><th style="text-align:left;">Nom</th></tr></thead>
+                            <tbody id="ftfTypeFirstBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:20px;">
+                    <div style="flex:1; min-width:200px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">📦 FTFs par type</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;"><tbody id="ftfTypeBody"></tbody></table>
+                    </div>
+                    <div style="flex:1; min-width:200px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">📏 FTFs par taille</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;"><tbody id="ftfSizeBody"></tbody></table>
+                    </div>
+                </div>
+
+                <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:20px;">
+                    <div style="flex:1; min-width:200px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">🧠 FTFs par difficulté</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;"><tbody id="ftfDBody"></tbody></table>
+                    </div>
+                    <div style="flex:1; min-width:200px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">⛰️ FTFs par terrain</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;"><tbody id="ftfTBody"></tbody></table>
+                    </div>
+                </div>
+
+                <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">🎯 Tableau FTF D/T (<span id="ftfDtCountBadge">0</span>/81)</h4>
+                <p id="ftfDtExtra" class="note"></p>
+                <div class="table-responsive" style="margin-bottom:20px;">
+                    <table class="dt-matrix" id="ftfDtMatrix" style="font-size: 11px;"></table>
+                </div>
+
+                <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">🚀 Chemin jusqu'aux 81 (FTF)</h4>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto; margin-bottom: 20px;">
+                    <table class="annual-table" style="font-size:12px; margin:0;">
+                        <thead><tr><th>#</th><th>Date</th><th>Intervalle</th><th>Code</th><th style="text-align:left;">Nom de la cache</th><th>Type</th><th>D/T</th></tr></thead>
+                        <tbody id="ftfPath81Body"></tbody>
+                    </table>
+                </div>
+
+                <div style="display:flex; gap:15px; flex-wrap:wrap; margin-bottom:20px;">
+                    <div style="flex:1; min-width:250px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">📅 FTF par mois</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0;"><tbody id="ftfMonthBody"></tbody></table>
+                    </div>
+                    <div style="flex:1; min-width:250px;">
+                        <h4 style="color:var(--primary); border-bottom:2px solid var(--border); padding-bottom:5px;">📆 FTF par jour de la semaine</h4>
+                        <table class="annual-table" style="font-size:12px; margin:0; margin-bottom:8px;"><tbody id="ftfDowBody"></tbody></table>
+                        <p id="ftfDowExtra" class="note" style="text-align:center; margin:0; font-size:12px;"></p>
+                    </div>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🥇 Liste détaillée de tous les FTF</h4>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="annual-table" id="ftfTable" style="margin:0; font-size: 13px;">
+                        <thead><tr>
+                            <th style="position:sticky; top:0;">#</th>
+                            <th style="position:sticky; top:0;">Date</th>
+                            <th style="position:sticky; top:0;">Intervalle</th>
+                            <th style="position:sticky; top:0;">Code GC</th>
+                            <th style="position:sticky; top:0;">D/T</th>
+                            <th style="position:sticky; top:0; text-align:left;">Nom de la cache</th>
+                        </tr></thead>
                         <tbody id="ftfTableBody"></tbody>
                     </table>
                 </div>
@@ -199,8 +414,31 @@
 
             <div id="tabContent-missedFtf" style="display:none;">
                 <div style="background: var(--bg); padding: 15px; border-radius: 8px; border: 2px dashed #eab308; margin-bottom: 15px;">
-                    <h4 style="color:#ca8a04; margin-top:0; margin-bottom:5px;">🔍 Recherche Hybride (TXT + GPX)</h4>
-                    <p class="note" style="margin-bottom:10px;">Le moteur analyse le nombre de logs et la chronologie pour vous donner un <b>taux de probabilité</b>.</p>
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:5px; flex-wrap:wrap; gap:10px;">
+                        <div>
+                            <h4 style="color:#ca8a04; margin-top:0; margin-bottom:5px;">🔍 Recherche Hybride (TXT + GPX)</h4>
+                            <p class="note" style="margin:0;">Le moteur hybride V5 calcule une <b>probabilité de FTF</b> basée sur vos logs et la chronologie.</p>
+                        </div>
+                        <button onclick="toggleAide('ftfHelpBox')" class="btn-aide">❓ Aide complète</button>
+                    </div>
+
+                    <div id="ftfHelpBox" class="aide-box" style="display:none;">
+                        <strong>🛠️ 1. Comment obtenir les 2 fichiers nécessaires ?</strong>
+                        <ol>
+                            <li><b>📁 GPX (Zone)</b> : sur Geocaching.com, fais une recherche autour de tes caches récentes (ou une Pocket Query "My Finds" récente), et télécharge le .gpx obtenu. Ce fichier sert à reconstituer la chronologie exacte des logs (qui a loggué avant qui).</li>
+                            <li><b>📄 TXT (Project-GC)</b> : sur Project-GC.com, va dans <i>Statistics → Other → My Finds Logs</i> (ou équivalent), filtre sur "FTF" si possible, puis copie-colle le résultat dans un fichier .txt. C'est le fichier "Patron" : il décide quelles caches sont analysées.</li>
+                            <li>Charge les 2 fichiers ci-dessous puis clique sur "Lancer l'analyse 🕵️".</li>
+                        </ol>
+                        <strong style="margin-top:10px;">🛠️ 2. Comment transformer un "Oubli" en "Vrai FTF" ?</strong>
+                        <ol>
+                            <li>Clique sur le code GC bleu de la cache pour l'ouvrir sur Geocaching.com.</li>
+                            <li>Modifie ton log "Found it" sur le site.</li>
+                            <li>Ajoute le tag officiel <b>{*FTF*}</b> (ou [FTF]) à l'intérieur de ton texte.</li>
+                            <li>Patiente quelques heures, puis génère un nouveau fichier GPX <i>My Finds</i> (ou exporte à nouveau le TXT de Project-GC).</li>
+                            <li>Importe les nouveaux fichiers ici : le Dashboard basculera automatiquement la cache de l'onglet "Oublis" vers la "🥇 Liste des FTF" !</li>
+                        </ol>
+                    </div>
                     
                     <div style="display: flex; gap: 10px; flex-wrap: wrap;">
                         <div style="display:flex; flex:1; min-width: 200px; gap:5px;">
@@ -252,16 +490,60 @@
                 </div>
             </div>
             <div id="tabContent-milestones" style="display:none;">
-                <div class="milestones-list" id="milestonesList"></div>
+                
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🏆 Jalons de découvertes</h4>
+                <div class="table-responsive" style="max-height: 250px; overflow-y: auto; margin-bottom: 20px;">
+                    <table class="annual-table" id="tableJalons" style="font-size: 13px; margin: 0;">
+                        <thead><tr><th style="position:sticky; top:0;">Jalon</th><th style="position:sticky; top:0;">Date</th><th style="position:sticky; top:0;">Pays</th><th style="position:sticky; top:0;">Code GC</th><th style="position:sticky; top:0;">Type</th><th style="position:sticky; top:0; text-align:left;">Nom de la cache</th></tr></thead>
+                        <tbody id="tbodyJalons"></tbody>
+                    </table>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🌍 Première cache par Pays</h4>
+                <div class="table-responsive" style="margin-bottom: 20px;">
+                    <table class="annual-table" id="tablePays" style="font-size: 13px; margin: 0;">
+                        <thead><tr><th>Jalon</th><th>Date</th><th>Pays</th><th>Code GC</th><th>Type</th><th style="text-align:left;">Nom de la cache</th></tr></thead>
+                        <tbody id="tbodyPays"></tbody>
+                    </table>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🗺️ Première cache par Région</h4>
+                <div class="table-responsive" style="margin-bottom: 20px;">
+                    <table class="annual-table" id="tableRegion" style="font-size: 13px; margin: 0;">
+                        <thead><tr><th>Jalon</th><th>Date</th><th>Pays</th><th>Région</th><th>Code GC</th><th>Type</th><th style="text-align:left;">Nom de la cache</th></tr></thead>
+                        <tbody id="tbodyRegion"></tbody>
+                    </table>
+                </div>
+
+                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">📦 Première cache par Type</h4>
+                <div class="table-responsive" style="margin-bottom: 20px;">
+                    <table class="annual-table" id="tableType" style="font-size: 13px; margin: 0;">
+                        <thead><tr><th>Jalon</th><th>Date</th><th>Pays</th><th>Code GC</th><th>Type</th><th style="text-align:left;">Nom de la cache</th></tr></thead>
+                        <tbody id="tbodyType"></tbody>
+                    </table>
+                </div>
+
             </div>
         </div>
+        </div><!-- /panel-ftf -->
 
-        
-
+        <div class="main-tab-panel" id="panel-matrix" style="display:none;">
         <div class="card card-full">
             <div class="card-header">
                 <h3>🎯 Matrice Difficulté / Terrain (Physiques)</h3>
-                <div class="card-badge" id="fizzyBadge" onclick="event.stopPropagation()">0/81</div>
+                <div style="display:flex; align-items:center; gap:10px; margin-left:auto;" onclick="event.stopPropagation()">
+                    <div class="card-badge" id="fizzyBadge">0/81</div>
+                    <button onclick="toggleAide('aideMatriceDT')" class="btn-aide">❓ Aide</button>
+                </div>
+            </div>
+            <div id="aideMatriceDT" class="aide-box" style="display:none;">
+                <strong>🛠️ Comment lire cette matrice ?</strong>
+                <ol>
+                    <li>Chaque case croise une <b>Difficulté</b> (lignes) et un <b>Terrain</b> (colonnes), de 1 à 5 par pas de 0,5 — soit 81 combinaisons possibles.</li>
+                    <li>Le chiffre dans la case = nombre de caches physiques trouvées avec cette combinaison D/T exacte. Plus la case est foncée, plus tu en as trouvé.</li>
+                    <li><b>Clique sur une case</b> pour voir le détail des types de caches correspondant à cette combinaison.</li>
+                    <li>Cette matrice se construit à partir du fichier <b>Caches (.gpx)</b> chargé en haut de page (section "1. Données principales").</li>
+                </ol>
             </div>
             <div class="dt-header" style="justify-content: center; gap:30px; margin-bottom: 5px;">
                 <span id="dtMoyD" style="color:var(--primary-dark);">Difficulté Moyenne: 0.00</span>
@@ -275,16 +557,6 @@
 
         <div class="card card-full">
             <div class="card-header">
-                <h3>🗓️ Calendrier des 366 Jours</h3>
-                <div class="card-badge" id="jours366Badge" onclick="event.stopPropagation()">0/366</div>
-            </div>
-            <div id="grid366Text" style="margin-bottom: 10px; font-weight: 600; color: var(--text-muted);"></div>
-            <div class="progress-container"><div class="progress-bar" id="jours366Progress" style="width: 0%;"></div></div>
-            <div class="grid-366-wrapper" id="grid366Container"></div>
-        </div>
-
-        <div class="card card-full">
-            <div class="card-header">
                 <h3>📊 Habitudes de découverte</h3>
                 <div class="tabs" onclick="event.stopPropagation()">
                     <button class="tab-btn active" onclick="switchRadarTab('days')">Jours de la semaine</button>
@@ -294,43 +566,45 @@
             <div class="chart-container" id="containerRadarDays" style="height: 350px;"><canvas id="radarDaysChart"></canvas></div>
             <div class="chart-container" id="containerRadarMonths" style="display:none; height: 350px;"><canvas id="radarMonthsChart"></canvas></div>
         </div>
+        </div><!-- /panel-matrix -->
 
-        <div class="card card-full">
-            <div class="card-header"><h3>📈 Répartition annuelle</h3></div>
-            <table class="annual-table" id="annualTable"></table>
-        </div>
-
-        <div class="card card-full">
+        <div class="main-tab-panel" id="panel-maps" style="display:none;">
+        <div class="card card-full" id="geoMapsCard" style="display:none;">
             <div class="card-header">
-                <h3>📊 Évolution des découvertes</h3>
-                <div class="tabs" onclick="event.stopPropagation()">
-                    <button class="tab-btn active" onclick="switchChartTab('monthly')">Par mois (Détail)</button>
-                    <button class="tab-btn" onclick="switchChartTab('cumul')">Cumulatif</button>
+                <h3>🗺️ Cartes des découvertes par région</h3>
+                <div style="display:flex; align-items:center; gap:10px; margin-left:auto;" onclick="event.stopPropagation()">
+                    <div class="tabs" id="dynamicMapTabs"></div>
+                    <button onclick="toggleAide('aideGeoMaps')" class="btn-aide">❓ Aide</button>
                 </div>
             </div>
-            <div class="chart-container" id="containerMonthly"><canvas id="monthlyChart"></canvas></div>
-            <div class="chart-container" id="containerCumul" style="display:none;"><canvas id="cumulativeChart"></canvas></div>
-        </div>
-        <div class="card card-full">
-            <div class="card-header">
-                <h3>📦 Détails des Caches</h3>
-                <div class="tabs" onclick="event.stopPropagation()">
-                    <button class="tab-btn active" onclick="switchDetailsTab('types')">Types de caches</button>
-                    <button class="tab-btn" onclick="switchDetailsTab('sizes')">Tailles des contenants</button>
-                </div>
+            <div id="aideGeoMaps" class="aide-box" style="display:none;">
+                <strong>🛠️ Comment ça marche ?</strong>
+                <ol>
+                    <li>Cette carte se construit automatiquement à partir du fichier <b>Caches (.gpx)</b> chargé dans la section "1. Données principales" en haut de page.</li>
+                    <li>Pour générer ce GPX : sur Geocaching.com, va dans <i>Mon Profil → Mes Caches Trouvées</i>, puis utilise l'export "My Finds Pocket Query" (ou Project-GC : Tools → My Finds export GPX).</li>
+                    <li>Clique sur un onglet pays pour voir le détail de ce pays, puis clique directement sur une région colorée pour ouvrir le détail des types de caches trouvées dans cette région.</li>
+                    <li>Si une région reste grise alors que tu y as des trouvailles, c'est probablement que le nom de la région dans ton GPX ne correspond à aucun nom connu : vérifie l'orthographe ou signale-le.</li>
+                </ol>
             </div>
-            <div class="chart-container" id="containerTypes"><canvas id="typeChart"></canvas></div>
-            <div id="containerSizes" style="display:none;">
-                <div class="chart-container"><canvas id="sizeChart"></canvas></div>
-                <p class="note" style="text-align:center; margin-top:5px;"><i>* Les Lab Caches ne sont pas intégrées dans ce graphique.</i></p>
-            </div>
+            <div id="dynamicMapContainers"></div>
         </div>
+        </div><!-- /panel-maps -->
 
+        <div class="main-tab-panel" id="panel-tools" style="display:none;">
         <div class="card card-full" id="module-generateur">
     <div class="card-header">
         <h3>🛠️ Créateur de Checker Project-GC & Badge</h3>
+        <button onclick="toggleAide('aideGenerateur'); event.stopPropagation();" class="btn-aide" style="margin-left:auto;">❓ Aide</button>
     </div>
-    
+    <div id="aideGenerateur" class="aide-box" style="display:none; margin: 0 0 10px;">
+        <strong>🛠️ À quoi sert cet outil ?</strong>
+        <ol>
+            <li>Il génère le <b>script Lua</b> à coller dans un Checker Project-GC pour créer un défi/challenge personnalisé (ex : "20 caches Earthcache en France avec D≥3").</li>
+            <li>Remplis les règles à gauche (nombre de caches, mot-clé, tailles, types, zone géo, dates de pose), puis clique sur "Générer le Script Lua".</li>
+            <li>Copie le résultat généré à droite et colle-le dans la configuration de ton Checker sur <a href="https://project-gc.com" target="_blank" style="color:#2563eb;">Project-GC.com</a> (section Checkers → Create/Edit → Lua Code).</li>
+            <li>La partie "Badge" génère un petit lien HTML à coller dans la description de ta cache Geocaching.com pour afficher le badge du Checker (nécessite le Code GC et l'ID Checker fournis par Project-GC après création).</li>
+        </ol>
+    </div>
     <div style="padding: 15px; display: flex; flex-wrap: wrap; gap: 20px; align-items: stretch;">
         
         <div style="flex: 1; min-width: 350px; background: var(--bg); padding: 20px; border-radius: 12px; border: 1px solid #475569;">
@@ -427,11 +701,12 @@
             </button>
         </div>
     </div>
-</div>
-<div class="card card-full">
+        </div><!-- fermeture manquante de #module-generateur (bug pré-existant corrigé) -->
+        <div class="card card-full">
             <div class="card-header"><h3>🏆 Tableau d'Honneur : Top 50 des journées</h3></div>
             <div class="days-grid" id="daysGrid"></div>
         </div>
+        </div><!-- /panel-tools -->
     </div>
 </div>
 

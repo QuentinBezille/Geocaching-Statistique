@@ -25,9 +25,24 @@ let chartTypes = null, chartSizes = null, chartCumul = null, chartMonthly = null
 let chartRadarDays = null, chartRadarMonths = null, chart360 = null, leafletMap = null, marker = null;
 
 window.onload = function() {
+    // --- Restauration de l'onglet principal actif (navigation par onglets) ---
+    try {
+        const lastTab = localStorage.getItem('mainTab_actif');
+        if (lastTab && MAIN_TABS.includes(lastTab)) {
+            MAIN_TABS.forEach(id => {
+                const panel = document.getElementById('panel-' + id);
+                if (panel) panel.style.display = (id === lastTab) ? 'block' : 'none';
+            });
+            document.querySelectorAll('.main-tab-btn').forEach((btn, idx) => {
+                btn.classList.toggle('active', MAIN_TABS[idx] === lastTab);
+            });
+        }
+    } catch (e) {}
+
     // --- NOUVEAU : Chargement auto du Pseudo et Domicile ---
     const savedPseudo = localStorage.getItem('userPseudo');
     const savedHome = localStorage.getItem('userHome');
+    
 
     if (savedPseudo) document.getElementById('username').value = savedPseudo;
     if (savedHome) document.getElementById('homeCoords').value = savedHome;
@@ -105,25 +120,27 @@ document.getElementById('homeCoords').addEventListener('input', (e) => {
 
 function btnReady(id, text) { document.getElementById(id).innerHTML = text; document.getElementById(id).classList.add('btn-ready'); }
 function viderMemoire() {
-    // Confirmation avant de supprimer
-    if (!confirm("⚠️ Attention : Cela va supprimer les fichiers GPX/TXT chargés.\n\nTes réglages (Pseudo et Domicile) seront conservés.\n\nContinuer ?")) {
+    // 1. Confirmation avant de supprimer
+    if (!confirm("⚠️ Attention : Cela va supprimer les fichiers GPX/TXT chargés.\n\nTes réglages (Pseudo, Domicile et Dark Mode) seront conservés.\n\nContinuer ?")) {
         return;
     }
 
-    // 1. Définir les clés que nous voulons GARDER (ne pas supprimer)
-    const keysToPreserve = ['userPseudo', 'userHome'];
+    // 2. Liste des clés que nous voulons GARDER (ne pas supprimer)
+    // On ajoute 'darkMode' ici, comme ça il n'est jamais touché par le nettoyage
+    const keysToPreserve = ['userPseudo', 'userHome', 'darkMode'];
 
-    // 2. Parcourir toutes les clés du localStorage en partant de la fin
+    // 3. Parcourir toutes les clés du localStorage
+    // On part de la fin pour éviter les problèmes d'index lors de la suppression
     for (let i = localStorage.length - 1; i >= 0; i--) {
         const key = localStorage.key(i);
         
-        // 3. Supprimer uniquement si la clé n'est PAS dans notre liste de protection
+        // 4. Supprimer uniquement si la clé n'est PAS dans notre liste de protection
         if (!keysToPreserve.includes(key)) {
             localStorage.removeItem(key);
         }
     }
 
-    // 4. Recharger la page pour remettre le Dashboard à zéro proprement
+    // 5. Recharger la page pour remettre le Dashboard à zéro proprement
     location.reload();
 }
 
@@ -133,6 +150,7 @@ document.getElementById('gpxInput').addEventListener('change', e => {
     const reader = new FileReader();
     reader.onload = ev => traiterGPX(ev.target.result);
     reader.readAsText(e.target.files[0]);
+    e.target.value = null; // Permet de recharger le même fichier
 });
 
 document.getElementById('csvInput').addEventListener('change', e => {
@@ -141,6 +159,7 @@ document.getElementById('csvInput').addEventListener('change', e => {
     const reader = new FileReader();
     reader.onload = ev => traiterLabs(ev.target.result);
     reader.readAsText(e.target.files[0]);
+    e.target.value = null; // Permet de recharger le même fichier
 });
 
 // === OUTIL DE NETTOYAGE EXTRÊME (Enlève accents, espaces, ponctuation) ===
@@ -234,6 +253,7 @@ document.getElementById('draftTxtInput').addEventListener('change', e => {
         btnReady('draftTxtBtn', "✅ TXT Chargé !");
     };
     reader.readAsText(e.target.files[0]);
+    e.target.value = null; // Permet de recharger le même fichier
 });
 
 document.getElementById('draftInput').addEventListener('change', e => {
@@ -242,6 +262,7 @@ document.getElementById('draftInput').addEventListener('change', e => {
     const reader = new FileReader();
     reader.onload = ev => traiterGPX(ev.target.result, true); // Le "true" active la magie du prévisionnel
     reader.readAsText(e.target.files[0]);
+    e.target.value = null; // Permet de recharger le même fichier
 });
 
 // === CONVERTISSEUR DE FUSEAU HORAIRE SEATTLE (MOTEUR GEOCACHING OFFICIEL) ===
@@ -308,10 +329,13 @@ function traiterGPX(xmlString, isDraft = false) {
             
             const type = cache.getElementsByTagNameNS("*", "type")[0]?.textContent || "Autre";
             const size = cache.getElementsByTagNameNS("*", "container")[0]?.textContent || "Not chosen";
+            
             const diffRaw = cache.getElementsByTagNameNS("*", "difficulty")[0]?.textContent || "1";
             const terrRaw = cache.getElementsByTagNameNS("*", "terrain")[0]?.textContent || "1";
             const dtKey = `${parseFloat(diffRaw)}/${parseFloat(terrRaw)}`;
             const cacheName = cache.getElementsByTagNameNS("*", "name")[0]?.textContent || "Cache Inconnue";
+            const country = cache.getElementsByTagNameNS("*", "country")[0]?.textContent || "Inconnu";
+            const state = cache.getElementsByTagNameNS("*", "state")[0]?.textContent || "Inconnue";
             const gcCode = wpt.getElementsByTagNameNS("*", "name")[0]?.textContent || "";
             const lat = parseFloat(wpt.getAttribute("lat"));
             const lon = parseFloat(wpt.getAttribute("lon"));
@@ -408,9 +432,33 @@ function traiterGPX(xmlString, isDraft = false) {
 
                     if (!tGpx.missedFtfList) tGpx.missedFtfList = [];
 
+                    // --- SAUVEGARDE DE LA CACHE POUR LES JALONS ---
+                    if (!tGpx.allFinds) tGpx.allFinds = [];
+                    tGpx.allFinds.push({
+                        date: dateCourte,
+                        logId: userLogInfo.id, // Utilisé pour trier chronologiquement le même jour
+                        gcCode: gcCode,
+                        name: cacheName,
+                        type: type,
+                        country: country,
+                        state: state
+                    });
+
                     if (isFTF) {
                         tGpx.ftfCount++;
-                        tGpx.ftfList.push({ date: dateCourte, name: cacheName, gcCode: gcCode });
+                        tGpx.ftfList.push({ 
+                            date: dateCourte, 
+                            name: cacheName, 
+                            gcCode: gcCode,
+                            lat: lat, 
+                            lon: lon, 
+                            d: parseFloat(diffRaw), 
+                            t: parseFloat(terrRaw),
+                            type: type, 
+                            size: size, /* NOUVEAU : Sauvegarde de la taille */
+                            country: country, 
+                            state: state
+                        });
                     } else {
                         // --- LE MOTEUR DE DÉTECTION DES OUBLIS ---
                         // On trie tous les logs valides par Date, puis par ID (chronologie absolue de Geocaching.com)
@@ -435,16 +483,32 @@ function traiterGPX(xmlString, isDraft = false) {
             // Assemblage
             if (countLogTrouve > 0) {
                 tGpx.count += countLogTrouve;
+                
+
                 tGpx.types[type] = (tGpx.types[type] || 0) + countLogTrouve;
                 tGpx.sizes[size] = (tGpx.sizes[size] || 0) + countLogTrouve;
+
                 
                 if (!tGpx.dt[dtKey]) tGpx.dt[dtKey] = { count: 0, types: {} };
                 tGpx.dt[dtKey].count += countLogTrouve;
                 tGpx.dt[dtKey].types[type] = (tGpx.dt[dtKey].types[type] || 0) + countLogTrouve;
                 
                 if (!isNaN(lat) && !isNaN(lon)) {
-                    tGpx.geo.push({lat: lat, lon: lon, count: countLogTrouve, gcCode: gcCode});
+                    tGpx.geo.push({lat: lat, lon: lon, count: countLogTrouve, gcCode: gcCode, country: country, type: type});
                 }
+                // NOUVEAU : Comptage géographique dynamique pour Google Charts
+                if (!tGpx.locations) tGpx.locations = {};
+                if (!tGpx.locations[country]) tGpx.locations[country] = { count: 0, states: {}, types: {} };
+                tGpx.locations[country].count += countLogTrouve;
+                tGpx.locations[country].types[type] = (tGpx.locations[country].types[type] || 0) + countLogTrouve;
+                if (!tGpx.locations[country].states[state]) tGpx.locations[country].states[state] = { count: 0, types: {} };
+                if (typeof tGpx.locations[country].states[state] === 'number') {
+                    // Migration: convertir l'ancien format nombre en objet
+                    tGpx.locations[country].states[state] = { count: tGpx.locations[country].states[state], types: {} };
+                }
+                tGpx.locations[country].states[state].count += countLogTrouve;
+                tGpx.locations[country].states[state].types[type] = (tGpx.locations[country].states[state].types[type] || 0) + countLogTrouve;
+
             }
         }
 
@@ -627,8 +691,8 @@ function compilerEtAfficher() {
         alert("⚠️ Dashboard en attente :\nVeuillez remplir votre Pseudo et vos Coordonnées Domicile dans le panneau de contrôle pour démarrer.");
         return;
     }
-    let fs = { totaux: { physiques: 0, labs: 0, global: 0 }, types: {}, sizes: {}, dt: {}, days: {}, geo: [], ftfList: [], missedFtfList: [] };
-
+    let fs = { totaux: { physiques: 0, labs: 0, global: 0 }, types: {}, sizes: {}, dt: {}, days: {}, geo: [], ftfList: [], missedFtfList: [], allFinds: [], locations: {} };
+    
     let sources = [];
     if (gpxStats) sources.push(gpxStats);
     if (isPrevisionnel && draftStats) sources.push(draftStats);
@@ -647,10 +711,38 @@ function compilerEtAfficher() {
                 fs.dt[d].types[type] = (fs.dt[d].types[type] || 0) + src.dt[d].types[type];
             }
         }
+        // AJOUTER LA FUSION DES LOCATIONS ICI :
+        if (src.locations) {
+            for (let country in src.locations) {
+                if (!fs.locations[country]) fs.locations[country] = { count: 0, states: {}, types: {} };
+                fs.locations[country].count += src.locations[country].count;
+                // Fusion des types par pays
+                if (src.locations[country].types) {
+                    for (let t in src.locations[country].types) {
+                        fs.locations[country].types[t] = (fs.locations[country].types[t] || 0) + src.locations[country].types[t];
+                    }
+                }
+                for (let state in src.locations[country].states) {
+                    let srcState = src.locations[country].states[state];
+                    // Support ancien format (nombre) et nouveau format (objet)
+                    if (typeof srcState === 'number') {
+                        if (!fs.locations[country].states[state]) fs.locations[country].states[state] = { count: 0, types: {} };
+                        fs.locations[country].states[state].count += srcState;
+                    } else {
+                        if (!fs.locations[country].states[state]) fs.locations[country].states[state] = { count: 0, types: {} };
+                        fs.locations[country].states[state].count += srcState.count || 0;
+                        for (let t in (srcState.types || {})) {
+                            fs.locations[country].states[state].types[t] = (fs.locations[country].states[state].types[t] || 0) + srcState.types[t];
+                        }
+                    }
+                }
+            }
+        }
         
         if (src.geo) fs.geo = fs.geo.concat(src.geo);
         if (src.ftfList) fs.ftfList = fs.ftfList.concat(src.ftfList);
         if (src.missedFtfList) fs.missedFtfList = fs.missedFtfList.concat(src.missedFtfList); // <-- AJOUTE CECI ICI
+        if (src.allFinds) fs.allFinds = (fs.allFinds || []).concat(src.allFinds);
         
         for(let date in src.days) {
             if (!fs.days[date]) fs.days[date] = { physiques: 0, labs: 0, total: 0, typesDetail: {} };
@@ -714,7 +806,7 @@ function compilerEtAfficher() {
             window.lastGeoData = fs.geo; // On sauvegarde les données pour le curseur
             generer360(fs.geo); 
         }
-        genererPaliers(fs.days);
+        genererPaliers(fs.allFinds);
         genererRadarHabitudes(fs.days);
     }
 
@@ -723,6 +815,14 @@ function compilerEtAfficher() {
     genererGraphesTypes(fs);
     genererTop50(fs.days);
     genererAgenda(fs.days);
+
+    // Cartes géo dynamiques
+    window.lastLocationsData = fs.locations;
+    window.lastFtfList = fs.ftfList;
+    appellerQuandGooglePret(() => {
+        initCartesDynamiques(fs.locations);
+        dessinerCarteFTFDynamique(fs.ftfList);
+    });
 
     // NOUVEAU : Force la mise à jour des couleurs des graphiques fraîchement créés
     applyTheme(document.body.classList.contains('dark-mode'));
@@ -1068,28 +1168,81 @@ function ouvrirModal366(md) {
 function fermerModal() { document.getElementById('dayModal').style.display = 'none'; }
 window.onclick = function(e) { if (e.target == document.getElementById('dayModal')) fermerModal(); }
 
-// === NOUVEAUTÉ : PALIERS (MILESTONES) ===
-function genererPaliers(daysData) {
-    const milestonesDef = [100, 500, 1000, 1500, 2000, 2500, 3000, 4000, 5000];
-    let runningTotal = 0;
-    let msIndex = 0;
-    let html = '';
+// === PALIERS ET JALONS (CLONE PROJECT-GC) ===
+function genererPaliers(allFinds) {
+    if (!allFinds || allFinds.length === 0) return;
+
+    // 1. TRI CHRONOLOGIQUE ABSOLU (Date, puis ID du log si c'est le même jour)
+    allFinds.sort((a, b) => {
+        let d1 = new Date(a.date).getTime();
+        let d2 = new Date(b.date).getTime();
+        if (d1 !== d2) return d1 - d2;
+        return a.logId - b.logId;
+    });
+
+    const jalonsCibles = [1, 10, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000, 2500, 3000, 4000, 5000, 6000, 7000, 8000, 9000, 10000];
     
-    const sortedDates = Object.keys(daysData).sort();
-    for(let d of sortedDates) {
-        runningTotal += daysData[d].total;
-        while(msIndex < milestonesDef.length && runningTotal >= milestonesDef[msIndex]) {
-            const dateFr = d.split('-').reverse().join('/');
-            html += `
-            <div class="milestone-item">
-                <div class="milestone-icon">🏅</div>
-                <div class="milestone-count">${milestonesDef[msIndex]}</div>
-                <div class="milestone-date">Atteint le ${dateFr}</div>
-            </div>`;
-            msIndex++;
+    let htmlJalons = '';
+    let htmlPays = '';
+    let htmlRegion = '';
+    let htmlType = '';
+
+    let paysVus = new Set();
+    let regionsVues = new Set();
+    let typesVus = new Set();
+
+    allFinds.forEach((cache, index) => {
+        let currentJalon = index + 1;
+        let dStr = cache.date.split('-').reverse().join('/');
+        let gcLink = `<a href="https://coord.info/${cache.gcCode}" target="_blank" style="color:#3b82f6; font-weight:bold; text-decoration:none;">${cache.gcCode}</a>`;
+        
+        let rowHtml = `<tr>
+            <td><strong>${currentJalon}</strong></td>
+            <td>${dStr}</td>
+            <td>${cache.country}</td>
+            <td>${gcLink}</td>
+            <td><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${gcColors[cache.type] || '#888'}; margin-right:5px;"></span>${cache.type}</td>
+            <td style="text-align:left;"><strong>${escHtml(cache.name)}</strong></td>
+        </tr>`;
+
+        // A. Vérification des Jalons Chiffrés
+        if (jalonsCibles.includes(currentJalon) || currentJalon === allFinds.length) {
+            htmlJalons += rowHtml;
         }
-    }
-    if(document.getElementById('milestonesList')) document.getElementById('milestonesList').innerHTML = html || "<p style='color:#888; font-style:italic;'>En route vers ton premier palier !</p>";
+
+        // B. Première par Pays
+        if (!paysVus.has(cache.country)) {
+            paysVus.add(cache.country);
+            htmlPays += rowHtml;
+        }
+
+        // C. Première par Région (France, Belgique, Allemagne, etc.)
+        const PAYS_AVEC_REGIONS = ["France", "Belgium", "Belgique", "Germany", "Allemagne", "United States", "États-Unis", "Canada", "Spain", "Espagne", "United Kingdom", "Royaume-Uni", "Netherlands", "Pays-Bas", "Switzerland", "Suisse"];
+        const regionKey = `${cache.country}||${cache.state}`;
+        if (PAYS_AVEC_REGIONS.includes(cache.country) && cache.state && cache.state !== 'Inconnue' && !regionsVues.has(regionKey)) {
+            regionsVues.add(regionKey);
+            htmlRegion += `<tr>
+                <td><strong>${currentJalon}</strong></td>
+                <td>${dStr}</td>
+                <td>${cache.country}</td>
+                <td>${cache.state}</td>
+                <td>${gcLink}</td>
+                <td><span style="display:inline-block; width:10px; height:10px; border-radius:50%; background-color:${gcColors[cache.type] || '#888'}; margin-right:5px;"></span>${cache.type}</td>
+                <td style="text-align:left;"><strong>${escHtml(cache.name)}</strong></td>
+            </tr>`;
+        }
+
+        // D. Première par Type
+        if (!typesVus.has(cache.type)) {
+            typesVus.add(cache.type);
+            htmlType += rowHtml;
+        }
+    });
+
+    if(document.getElementById('tbodyJalons')) document.getElementById('tbodyJalons').innerHTML = htmlJalons;
+    if(document.getElementById('tbodyPays')) document.getElementById('tbodyPays').innerHTML = htmlPays;
+    if(document.getElementById('tbodyRegion')) document.getElementById('tbodyRegion').innerHTML = htmlRegion;
+    if(document.getElementById('tbodyType')) document.getElementById('tbodyType').innerHTML = htmlType;
 }
 
 // === NOUVEAUTÉ : RADARS HABITUDES ===
@@ -1142,6 +1295,7 @@ let sortAsc360 = [true, true];
 let map360Instance = null;
 let mapCacheLayer = null;
 let mapGridLayer = null;
+let mapAutoFitDone = false; // Évite de re-zoomer en boucle quand le mode "Tout voir" redessine après un zoomend
 
 // === CALCUL 360 SECTEURS (JUSQU'À 15 CACHES AVEC COULEURS DYNAMIQUES) ===
 function generer360(geoData) {
@@ -1231,6 +1385,83 @@ function generer360(geoData) {
     }
 
     if (map360Instance) updateMapPremium();
+
+    genererResumeParPays(geoData, homeLat, homeLon, target360);
+}
+
+// === RÉSUMÉ PAR PAYS — MINI CERCLES DE SECTEURS AZIMUTAUX (façon radar 360°, mais filtré par pays) ===
+// Pour chaque pays où des caches ont été trouvées, calcule les 360 secteurs d'azimut (depuis le
+// domicile) mais en ne comptant que les caches de CE pays, puis dessine un petit cercle en SVG
+// (vert = secteur couvert par au moins une cache de ce pays, gris = secteur non couvert).
+function genererResumeParPays(geoData, homeLat, homeLon, target360) {
+    const container = document.getElementById('resumeParPaysContainer');
+    if (!container) return;
+
+    // Regroupe les caches par pays (le champ `country` est présent depuis l'enrichissement de tGpx.geo)
+    let parPays = {};
+    geoData.forEach(c => {
+        let pays = c.country || 'Inconnu';
+        if (pays === 'Inconnu') return; // On ignore les caches sans pays connu pour ce résumé
+        if (!parPays[pays]) parPays[pays] = [];
+        parPays[pays].push(c);
+    });
+
+    let paysListe = Object.keys(parPays).sort((a, b) => parPays[b].length - parPays[a].length);
+    if (paysListe.length === 0) {
+        container.innerHTML = `<p class="note" style="text-align:center;">Charge ton fichier Caches (.gpx) pour voir le résumé par pays.</p>`;
+        return;
+    }
+
+    let html = '';
+    paysListe.forEach(pays => {
+        let caches = parPays[pays];
+        let sectors = new Array(360).fill(0);
+        caches.forEach(c => {
+            if (isNaN(c.lat) || isNaN(c.lon)) return;
+            let brng = calculerAzimut(homeLat, homeLon, c.lat, c.lon);
+            let sector = Math.floor(brng);
+            if (sector === 360) sector = 0;
+            sectors[sector] += (c.count || 1);
+        });
+        let completed = sectors.filter(s => s >= target360).length;
+        let nomAffiche = getNomPaysFR(pays);
+        let totalCaches = caches.reduce((sum, c) => sum + (c.count || 1), 0);
+
+        html += `
+        <div class="pays-resume-card" title="${nomAffiche} : ${completed}/360 secteurs avec au moins ${target360} cache(s)">
+            ${construireSvgCercleSecteurs(sectors, target360)}
+            <div class="pays-resume-label">
+                <strong>${nomAffiche}</strong>
+                <span>${completed}/360 secteurs</span>
+                <span style="opacity:0.7;">${totalCaches} cache${totalCaches > 1 ? 's' : ''}</span>
+            </div>
+        </div>`;
+    });
+
+    container.innerHTML = html;
+}
+
+// Construit un petit SVG en anneau : 360 segments fins, vert si le secteur est couvert
+// (>= objectif), gris clair sinon. Purement décoratif/résumé — pas interactif comme le radar principal.
+function construireSvgCercleSecteurs(sectors, target360) {
+    const size = 90, cx = size / 2, cy = size / 2, rInner = 26, rOuter = 42;
+    let paths = '';
+    for (let i = 0; i < 360; i++) {
+        let aTrouve = sectors[i] >= target360;
+        if (!aTrouve && sectors[i] === 0) continue; // on ne dessine pas les segments totalement vides pour garder un rendu léger (le fond gris du cercle les représente déjà)
+        let a1 = (i - 90) * Math.PI / 180;
+        let a2 = (i + 1 - 90) * Math.PI / 180;
+        let x1 = cx + rInner * Math.cos(a1), y1 = cy + rInner * Math.sin(a1);
+        let x2 = cx + rOuter * Math.cos(a1), y2 = cy + rOuter * Math.sin(a1);
+        let x3 = cx + rOuter * Math.cos(a2), y3 = cy + rOuter * Math.sin(a2);
+        let x4 = cx + rInner * Math.cos(a2), y4 = cy + rInner * Math.sin(a2);
+        let color = aTrouve ? '#10b981' : '#f59e0b';
+        paths += `<path d="M${x1},${y1} L${x2},${y2} L${x3},${y3} L${x4},${y4} Z" fill="${color}" />`;
+    }
+    return `<svg viewBox="0 0 ${size} ${size}" width="90" height="90">
+        <circle cx="${cx}" cy="${cy}" r="${(rInner+rOuter)/2}" fill="none" stroke="#e2e8f0" stroke-width="${rOuter-rInner}" />
+        ${paths}
+    </svg>`;
 }
 
 function renderTable360() {
@@ -1308,8 +1539,10 @@ function updateMapPremium() {
     let showAll = document.getElementById('showAllSectors').checked;
     let currentZoom = map360Instance.getZoom();
 
-    // Vérification du zoom minimum
-    if (currentZoom < 10) {
+    // Vérification du zoom minimum — ne s'applique qu'au mode "1 secteur" (cercles de caches
+    // individuelles, lourd à bas zoom). Le mode "Tout voir" est justement pensé pour une vue
+    // dézoomée d'ensemble façon "soleil sur toute la zone explorée", donc pas de contrainte ici.
+    if (!showAll && currentZoom < 10) {
         document.getElementById('zoomWarning').style.display = 'block';
         if (mapCacheLayer) map360Instance.removeLayer(mapCacheLayer);
         if (mapGridLayer) map360Instance.removeLayer(mapGridLayer);
@@ -1325,25 +1558,74 @@ function updateMapPremium() {
     mapCacheLayer = L.layerGroup().addTo(map360Instance);
     mapGridLayer = L.layerGroup().addTo(map360Instance);
 
-    // Dessiner les lignes de degrés
-    for (let i = 0; i < 360; i += 10) {
-        let p = getDestinationPoint(homeLat, homeLon, i, 80);
-        L.polyline([[homeLat, homeLon], p], {color: 'rgba(255,255,255,0.3)', weight: 1, dashArray: '5,5'}).addTo(mapGridLayer);
-        let icon = L.divIcon({className: 'degree-label', html: `<div style="color:white; font-weight:bold; font-size:11px; text-shadow: 1px 1px 3px black;">${i}°</div>`, iconSize: [30, 15]});
-        L.marker(p, {icon: icon}).addTo(mapGridLayer);
-    }
-
     // Affichage des secteurs
     if (showAll) {
-        // Mode "Tout voir" : dessine tous les secteurs trouvés
+        // Mode "Tout voir" : un rayon par degré (360 rayons), vert si le secteur contient au
+        // moins une cache trouvée, rouge sinon — façon "soleil" complet sur toute la zone explorée,
+        // chaque rayon s'étendant jusqu'à la distance réelle de la cache la plus lointaine du secteur.
+
+        // 1. Calcule la distance réelle (km) de la cache la plus lointaine, pour chacun des 360 secteurs.
+        let maxDistParSecteur = new Array(360).fill(0);
+        let distanceGlobaleMax = 0;
+        if (window.lastGeoData) {
+            window.lastGeoData.forEach(c => {
+                if (c.lat === undefined || c.lon === undefined || isNaN(c.lat) || isNaN(c.lon)) return;
+                let brng = calculerAzimut(homeLat, homeLon, c.lat, c.lon);
+                let sect = Math.floor(brng);
+                if (sect === 360) sect = 0;
+                let dist = getDistanceKM(homeLat, homeLon, c.lat, c.lon);
+                if (dist > maxDistParSecteur[sect]) maxDistParSecteur[sect] = dist;
+                if (dist > distanceGlobaleMax) distanceGlobaleMax = dist;
+            });
+        }
+        // Distance plancher pour que les secteurs "vides" restent visibles à l'écran (10% du max global, mini 2km)
+        let distancePlancher = Math.max(distanceGlobaleMax * 0.12, 2);
+
+        // Lignes/étiquettes de degrés (grille de fond), à la même échelle dynamique que les rayons
+        for (let i = 0; i < 360; i += 10) {
+            let p = getDestinationPoint(homeLat, homeLon, i, distanceGlobaleMax > 0 ? distanceGlobaleMax * 1.05 : 80);
+            L.polyline([[homeLat, homeLon], p], {color: 'rgba(255,255,255,0.25)', weight: 1, dashArray: '4,4'}).addTo(mapGridLayer);
+            let icon = L.divIcon({className: 'degree-label', html: `<div style="color:white; font-weight:bold; font-size:10px; text-shadow: 1px 1px 3px black;">${i}°</div>`, iconSize: [30, 15]});
+            L.marker(p, {icon: icon}).addTo(mapGridLayer);
+        }
+
         sectorDataGlobal.forEach((s, i) => {
-            if(s.count > 0) {
-                let p1 = getDestinationPoint(homeLat, homeLon, i, 80);
-                let p2 = getDestinationPoint(homeLat, homeLon, i + 1, 80);
-                L.polygon([[homeLat, homeLon], p1, p2], {color: '#10b981', weight: 0.5, fillOpacity: 0.2}).addTo(mapGridLayer);
-            }
+            let aTrouve = s.count > 0;
+            let distRayon = aTrouve ? Math.max(maxDistParSecteur[i], distancePlancher * 0.6) : distancePlancher;
+            let p = getDestinationPoint(homeLat, homeLon, i + 0.5, distRayon);
+            L.polyline([[homeLat, homeLon], p], {
+                color: aTrouve ? '#10b981' : '#ef4444',
+                weight: aTrouve ? 2 : 1,
+                opacity: aTrouve ? 0.85 : 0.55,
+            }).addTo(mapGridLayer);
         });
+
+        // Petits points verts pour chaque cache réellement trouvée, façon nuage de points sur la carte
+        if (window.lastGeoData) {
+            window.lastGeoData.forEach(c => {
+                if (c.lat === undefined || c.lon === undefined || isNaN(c.lat) || isNaN(c.lon)) return;
+                L.circleMarker([c.lat, c.lon], { radius: 2, fillColor: '#10b981', color: '#10b981', weight: 0, fillOpacity: 0.6 }).addTo(mapCacheLayer);
+            });
+        }
+
+        // Recentre/zoome automatiquement la carte pour englober toute la zone explorée
+        // (seulement à l'activation du mode, pas à chaque redraw déclenché par zoomend, sinon boucle infinie)
+        if (distanceGlobaleMax > 0 && !mapAutoFitDone) {
+            mapAutoFitDone = true;
+            let bounds = L.latLngBounds([[homeLat, homeLon]]);
+            for (let deg = 0; deg < 360; deg += 5) {
+                bounds.extend(getDestinationPoint(homeLat, homeLon, deg, distanceGlobaleMax));
+            }
+            map360Instance.fitBounds(bounds, { padding: [20, 20] });
+        }
     } else {
+        // Lignes/étiquettes de degrés (grille de fond) à rayon fixe pour le mode 1 secteur (zoom proche)
+        for (let i = 0; i < 360; i += 10) {
+            let p = getDestinationPoint(homeLat, homeLon, i, 80);
+            L.polyline([[homeLat, homeLon], p], {color: 'rgba(255,255,255,0.3)', weight: 1, dashArray: '5,5'}).addTo(mapGridLayer);
+            let icon = L.divIcon({className: 'degree-label', html: `<div style="color:white; font-weight:bold; font-size:11px; text-shadow: 1px 1px 3px black;">${i}°</div>`, iconSize: [30, 15]});
+            L.marker(p, {icon: icon}).addTo(mapGridLayer);
+        }
         // Mode 1 secteur : met en évidence le secteur sélectionné et affiche les caches
         let p1 = getDestinationPoint(homeLat, homeLon, selectedSector, 80);
         let p2 = getDestinationPoint(homeLat, homeLon, selectedSector + 1, 80);
@@ -1405,23 +1687,283 @@ function switchRadarTab(tab) {
     btns[1].classList.toggle('active', tab === 'months');
 }
 
+// =====================================================================
+// === CENTRE D'ANALYSE FTF AVANCÉ (CALCULS ET GRILLE) =================
+// =====================================================================
+
+function getDistanceKM(lat1, lon1, lat2, lon2) {
+    const dLat = (lat2 - lat1) * Math.PI / 180, dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLon/2) * Math.sin(dLon/2);
+    return 6371 * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
+}
+
+function formatCoordsLabel(lat, lon) {
+    const fmt = (c, isLat) => `${c >= 0 ? (isLat?'N':'E') : (isLat?'S':'W')} ${Math.floor(Math.abs(c))}° ${((Math.abs(c)-Math.floor(Math.abs(c)))*60).toFixed(3).padStart(6, '0')}`;
+    return `${fmt(lat, true)} ${fmt(lon, false)}`;
+}
+
 function genererFTFList(ftfList) {
-    const tBody = document.getElementById('ftfTableBody');
+    const tBodyList = document.getElementById('ftfTableBody');
+    const tBodyStats = document.getElementById('ftfStatsTableBody');
+    
     if(document.getElementById('kpiFtf')) document.getElementById('kpiFtf').innerText = ftfList ? ftfList.length : 0;
-    if(document.getElementById('ftfBadgeTotal')) document.getElementById('ftfBadgeTotal').innerText = `${ftfList ? ftfList.length : 0} FTF`;
     
     if (!ftfList || ftfList.length === 0) {
-        if(tBody) tBody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#888;">Aucun FTF détecté. Utilisez {*FTF*} dans vos logs.</td></tr>`;
+        if(document.getElementById('ftfBadgeTotal')) document.getElementById('ftfBadgeTotal').innerText = `0 FTF`;
+        if(tBodyList) tBodyList.innerHTML = `<tr><td colspan="6" style="text-align:center; color:var(--text-muted);">Aucun FTF détecté. Utilisez {*FTF*} dans vos logs.</td></tr>`;
         return;
     }
 
-    ftfList.sort((a, b) => new Date(b.date) - new Date(a.date)); 
-    let html = '';
-    ftfList.forEach(ftf => {
+    let homeLat = 0, homeLon = 0;
+    if (document.getElementById('homeCoords').value) {
+        let c = parseGeocachingCoords(document.getElementById('homeCoords').value);
+        homeLat = c.lat; homeLon = c.lon;
+    }
+
+    ftfList.sort((a, b) => new Date(a.date) - new Date(b.date));
+    let htmlList = '', totalDist = 0, totalInterval = 0;
+    let nord = ftfList[0], sud = ftfList[0], est = ftfList[0], ouest = ftfList[0], proche = ftfList[0], eloigne = ftfList[0];
+    let minDist = 999999, maxDist = -1, ftfParJour = {}, ftfParMois = {}, lastDateObj = null;
+
+    // --- VARIABLES POUR LES NOUVEAUX TABLEAUX P-GC ---
+    let firstLoc = new Set(), firstType = new Set(), dSet = new Set();
+    let htmlFirstLoc = '', htmlFirstType = '', htmlPath81 = '';
+    let locCount = 0, typeCount = 0, dtCount = 0, lastPathDate = null;
+    let typeCounts = {}, sizeCounts = {};
+    let dCounts = {"1":0,"1.5":0,"2":0,"2.5":0,"3":0,"3.5":0,"4":0,"4.5":0,"5":0};
+    let tCounts = {"1":0,"1.5":0,"2":0,"2.5":0,"3":0,"3.5":0,"4":0,"4.5":0,"5":0};
+    let monthCounts = new Array(12).fill(0);
+    let dowCounts = new Array(7).fill(0); // 0 = Lundi ... 6 = Dimanche
+    let dtMatrix = {}, totalD = 0, totalT = 0, extDTCount = 0;
+
+    const moisNoms = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
+    const joursNoms = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+
+    ftfList.forEach((ftf, index) => {
+        let cDate = new Date(ftf.date);
+        let intervalText = "";
+        let rawDays = 0;
+        if (lastDateObj) {
+            rawDays = Math.round((cDate - lastDateObj) / 86400000);
+            intervalText = `${rawDays} j`; 
+            totalInterval += rawDays;
+        }
+        lastDateObj = cDate;
         let dStr = ftf.date.split('-').reverse().join('/');
-        html += `<tr><td><strong>${dStr}</strong></td><td style="color:#02874d; font-weight:bold;">${ftf.gcCode}</td><td>${ftf.name}</td></tr>`;
+
+        // 1. STATS GLOBALES ET RECORDS
+        ftfParJour[ftf.date] = (ftfParJour[ftf.date] || 0) + 1;
+        ftfParMois[ftf.date.substring(0, 7)] = (ftfParMois[ftf.date.substring(0, 7)] || 0) + 1;
+
+        if (homeLat !== 0 && !isNaN(ftf.lat)) {
+            let dist = getDistanceKM(homeLat, homeLon, ftf.lat, ftf.lon);
+            totalDist += dist;
+            if (dist < minDist) { minDist = dist; proche = ftf; }
+            if (dist > maxDist) { maxDist = dist; eloigne = ftf; }
+            if (ftf.lat > nord.lat) nord = ftf; if (ftf.lat < sud.lat) sud = ftf;
+            if (ftf.lon > est.lon) est = ftf; if (ftf.lon < ouest.lon) ouest = ftf;
+        }
+
+        // Ligne de la liste principale — cliquable pour voir le type de cache en détail (comme la Matrice D/T)
+        let gcLink = `<a href="https://coord.info/${ftf.gcCode}" target="_blank" style="color:#3b82f6; font-weight:bold; text-decoration:none;">${ftf.gcCode}</a>`;
+        let nomEsc = escHtml(ftf.name).replace(/'/g, "&#39;");
+        htmlList += `<tr style="border-bottom: 1px solid var(--border); cursor:pointer;" onclick="ouvrirModalFtfDetail('${nomEsc}', '${escHtml(ftf.type)}', '${ftf.d}', '${ftf.t}', '${dStr}', '${ftf.gcCode}')" title="Cliquer pour voir le type de cache">
+            <td><strong>${index + 1}</strong></td><td>${dStr}</td>
+            <td style="color:var(--text-muted); font-size:11px;">${intervalText}</td>
+            <td onclick="event.stopPropagation()">${gcLink}</td>
+            <td><span style="background:var(--bg); border:1px solid var(--border); padding:2px 6px; border-radius:4px; font-weight:bold; font-size:11px;">${ftf.d}/${ftf.t}</span></td>
+            <td style="text-align:left;"><strong>${escHtml(ftf.name)}</strong></td>
+        </tr>`;
+
+        // 2. NOUVELLES STATS PROJECT-GC
+        typeCounts[ftf.type] = (typeCounts[ftf.type] || 0) + 1;
+        let sizeFormat = ftf.size ? ftf.size : "Not chosen";
+        sizeCounts[sizeFormat] = (sizeCounts[sizeFormat] || 0) + 1;
+        dCounts[ftf.d] = (dCounts[ftf.d] || 0) + 1;
+        tCounts[ftf.t] = (tCounts[ftf.t] || 0) + 1;
+        totalD += ftf.d; totalT += ftf.t;
+        if (ftf.d >= 3 || ftf.t >= 3) extDTCount++;
+
+        monthCounts[cDate.getMonth()]++;
+        dowCounts[(cDate.getDay() + 6) % 7]++; // Shift 0=Sunday to 6=Sunday
+
+        // Premier par emplacement
+        let locKey = `${ftf.country} / ${ftf.state}`;
+        if (!firstLoc.has(locKey)) {
+            firstLoc.add(locKey); locCount++;
+            htmlFirstLoc += `<tr><td>${locCount}</td><td>${dStr}</td><td>${locKey}</td><td>${gcLink}</td><td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:${gcColors[ftf.type] || '#888'}; margin-right:4px;"></span>${ftf.type}</td><td style="text-align:left;">${escHtml(ftf.name)}</td></tr>`;
+        }
+
+        // Premier par type
+        if (!firstType.has(ftf.type)) {
+            firstType.add(ftf.type); typeCount++;
+            htmlFirstType += `<tr><td>${typeCount}</td><td>${dStr}</td><td>${ftf.country}</td><td>${gcLink}</td><td><span style="display:inline-block; width:8px; height:8px; border-radius:50%; background-color:${gcColors[ftf.type] || '#888'}; margin-right:4px;"></span>${ftf.type}</td><td style="text-align:left;">${escHtml(ftf.name)}</td></tr>`;
+        }
+
+        // Chemin 81 & Matrice
+        let dtKey = `${ftf.d}/${ftf.t}`;
+        dtMatrix[dtKey] = (dtMatrix[dtKey] || 0) + 1;
+        if (!dSet.has(dtKey)) {
+            dSet.add(dtKey); dtCount++;
+            let intText = lastPathDate ? Math.round((cDate - lastPathDate) / 86400000) + " j" : "-";
+            htmlPath81 += `<tr><td>${dtCount}</td><td>${dStr}</td><td style="color:var(--text-muted); font-size:11px;">${intText}</td><td>${gcLink}</td><td style="text-align:left;"><strong>${escHtml(ftf.name)}</strong></td><td>${ftf.type}</td><td><span style="background:var(--bg); border:1px solid var(--border); padding:2px 6px; border-radius:4px; font-weight:bold; font-size:11px;">${dtKey}</span></td></tr>`;
+            lastPathDate = cDate;
+        }
     });
-    if(tBody) tBody.innerHTML = html;
+
+    // --- INJECTION DES DONNÉES DANS L'INTERFACE ---
+    
+    // Pourcentages globaux
+    let totalFTF = ftfList.length;
+    let pctFTF = ((totalFTF / (gpxStats ? gpxStats.count : 1)) * 100).toFixed(2);
+    if(document.getElementById('ftfBadgeTotal')) document.getElementById('ftfBadgeTotal').innerText = `${totalFTF} FTF (${pctFTF}%)`;
+
+    // Records
+    let maxJour = 0, dateMaxJour = ""; for (let d in ftfParJour) { if (ftfParJour[d] > maxJour) { maxJour = ftfParJour[d]; dateMaxJour = d.split('-').reverse().join('/'); } }
+    let avgDist = (totalDist / totalFTF).toFixed(1);
+    let avgInterval = totalFTF > 1 ? (totalInterval / (totalFTF - 1)).toFixed(1) : 0;
+
+    const sr = (l, v, c) => `<tr><td style="padding:6px 0; border-bottom:1px solid var(--border); width:40%; color:var(--text-muted); font-weight:600;">${l} :</td><td style="padding:6px 0; border-bottom:1px solid var(--border); color:var(--text-main);">${v} ${c ? `<a href="https://coord.info/${c}" target="_blank" style="color:#3b82f6; text-decoration:none; font-weight:bold; margin-left:8px;">${c}</a>` : ""}</td></tr>`;
+
+    let htmlStats = sr("Distance moyenne", `<b>${avgDist} km</b> (depuis domicile)`) + sr("Intervalle moyen", `<b>${avgInterval} jours</b>`) + sr("Max en un jour", `<b>${maxJour}</b> (le ${dateMaxJour})`);
+    if (minDist !== 999999) {
+        htmlStats += sr("Plus proche", `<b>${minDist.toFixed(2)} km</b> - ${escHtml(proche.name)}`, proche.gcCode) + sr("Plus éloigné", `<b>${maxDist.toFixed(2)} km</b> - ${escHtml(eloigne.name)}`, eloigne.gcCode);
+        htmlStats += sr("Plus au nord", `<b>${formatCoordsLabel(nord.lat, nord.lon).split(' E ')[0].split(' W ')[0]}</b> - ${escHtml(nord.name)}`, nord.gcCode);
+        htmlStats += sr("Plus au sud", `<b>${formatCoordsLabel(sud.lat, sud.lon).split(' E ')[0].split(' W ')[0]}</b> - ${escHtml(sud.name)}`, sud.gcCode);
+        htmlStats += sr("Plus à l'est", `<b>${formatCoordsLabel(est.lat, est.lon).split('N ')[1]?.substring(8) || formatCoordsLabel(est.lat, est.lon)}</b> - ${escHtml(est.name)}`, est.gcCode);
+        htmlStats += sr("Plus à l'ouest", `<b>${formatCoordsLabel(ouest.lat, ouest.lon).split('N ')[1]?.substring(8) || formatCoordsLabel(ouest.lat, ouest.lon)}</b> - ${escHtml(ouest.name)}`, ouest.gcCode);
+    }
+    if(tBodyStats) tBodyStats.innerHTML = htmlStats;
+    if(tBodyList) tBodyList.innerHTML = htmlList;
+
+    // Tableaux Premières fois & Chemin 81
+    if(document.getElementById('ftfLocBody')) document.getElementById('ftfLocBody').innerHTML = htmlFirstLoc;
+    if(document.getElementById('ftfTypeFirstBody')) document.getElementById('ftfTypeFirstBody').innerHTML = htmlFirstType;
+    if(document.getElementById('ftfPath81Body')) document.getElementById('ftfPath81Body').innerHTML = htmlPath81;
+
+    // Helper pour générer un mini-tableau avec %
+    const genMiniTable = (dataObj, isFixedScale = false, fixedArr = []) => {
+        let h = `<tr><th style="background:var(--bg);">Valeur</th><th style="background:var(--bg);">Nombre</th><th style="background:var(--bg);">%</th></tr>`;
+        let items = isFixedScale ? fixedArr : Object.keys(dataObj).sort((a,b) => dataObj[b] - dataObj[a]);
+        items.forEach(k => {
+            let count = dataObj[k] || 0;
+            let pct = totalFTF > 0 ? ((count / totalFTF) * 100).toFixed(2) : 0;
+            if(!isFixedScale && count === 0) return;
+            h += `<tr><td style="text-align:left;">${k}</td><td><strong>${count}</strong></td><td style="color:var(--text-muted);">${pct}%</td></tr>`;
+        });
+        return h;
+    };
+
+    // Types et Tailles
+    if(document.getElementById('ftfTypeBody')) document.getElementById('ftfTypeBody').innerHTML = genMiniTable(typeCounts);
+    if(document.getElementById('ftfSizeBody')) document.getElementById('ftfSizeBody').innerHTML = genMiniTable(sizeCounts);
+
+    // Difficulté et Terrain
+    const notesArr = ["1", "1.5", "2", "2.5", "3", "3.5", "4", "4.5", "5"];
+    let hD = genMiniTable(dCounts, true, notesArr) + `<tr><td colspan="3" style="background:var(--bg); font-weight:bold;">Moyenne : ${(totalD/totalFTF).toFixed(2)}</td></tr>`;
+    let hT = genMiniTable(tCounts, true, notesArr) + `<tr><td colspan="3" style="background:var(--bg); font-weight:bold;">Moyenne : ${(totalT/totalFTF).toFixed(2)}</td></tr>`;
+    if(document.getElementById('ftfDBody')) document.getElementById('ftfDBody').innerHTML = hD;
+    if(document.getElementById('ftfTBody')) document.getElementById('ftfTBody').innerHTML = hT;
+
+    // Matrice D/T FTF
+    if(document.getElementById('ftfDtCountBadge')) document.getElementById('ftfDtCountBadge').innerText = dtCount;
+    if(document.getElementById('ftfDtExtra')) document.getElementById('ftfDtExtra').innerHTML = `<b>${extDTCount} FTFs</b> (${((extDTCount/totalFTF)*100).toFixed(1)}%) ont une cotation Difficulté ou Terrain de 3 ou plus.`;
+    
+    let htmlDt = `<tr><th colspan="2" rowspan="2"></th><th colspan="9" class="axis-label" style="background:transparent; border:none;">TERRAIN</th><th rowspan="2" class="dt-total">Total</th></tr><tr>`;
+    notesArr.forEach(t => htmlDt += `<th style="background:var(--bg); border: 1px solid var(--border); border-radius:4px;">${t}</th>`);
+    htmlDt += '</tr>';
+    let colTot = {"1":0,"1.5":0,"2":0,"2.5":0,"3":0,"3.5":0,"4":0,"4.5":0,"5":0};
+    notesArr.forEach((d, idx) => {
+        htmlDt += `<tr>`;
+        if (idx === 0) { htmlDt += `<th rowspan="9" class="axis-label" style="background:transparent; border:none; writing-mode: vertical-rl; transform: rotate(180deg);">DIFFICULTÉ</th>`; }
+        htmlDt += `<th style="background:var(--bg); border: 1px solid var(--border); border-radius:4px;">${d}</th>`;
+        let rTot = 0;
+        notesArr.forEach(t => {
+            let c = dtMatrix[`${d}/${t}`] || 0;
+            rTot += c; colTot[t] += c;
+            if(c > 0) { htmlDt += `<td class="dt-cell" style="background-color: rgba(16, 185, 129, 0.9); color: white;" title="${c} FTF">${c}</td>`; } 
+            else { htmlDt += `<td class="dt-empty" style="border: 1px solid var(--border);"></td>`; }
+        });
+        htmlDt += `<td class="dt-total">${rTot}</td></tr>`;
+    });
+    htmlDt += `<tr><th colspan="2" class="dt-total" style="text-align:right;">Total</th>`;
+    notesArr.forEach(t => htmlDt += `<td class="dt-total">${colTot[t]}</td>`);
+    htmlDt += `<td class="dt-grand-total">${totalFTF}</td></tr>`;
+    if(document.getElementById('ftfDtMatrix')) document.getElementById('ftfDtMatrix').innerHTML = htmlDt;
+
+    // Mois et Jours de semaine
+    let hMonth = `<tr><th style="background:var(--bg);">Mois</th><th style="background:var(--bg);">Nombre</th><th style="background:var(--bg);">%</th></tr>`;
+    moisNoms.forEach((m, i) => { let pct = totalFTF > 0 ? ((monthCounts[i]/totalFTF)*100).toFixed(2) : 0; hMonth += `<tr><td style="text-align:left;">${m}</td><td><strong>${monthCounts[i]}</strong></td><td style="color:var(--text-muted);">${pct}%</td></tr>`; });
+    if(document.getElementById('ftfMonthBody')) document.getElementById('ftfMonthBody').innerHTML = hMonth;
+
+    let hDow = `<tr><th style="background:var(--bg);">Jour</th><th style="background:var(--bg);">Nombre</th><th style="background:var(--bg);">%</th></tr>`;
+    let weekCount = 0, weekendCount = 0;
+    joursNoms.forEach((j, i) => { 
+        let c = dowCounts[i]; 
+        if(i < 5) weekCount += c; else weekendCount += c;
+        let pct = totalFTF > 0 ? ((c/totalFTF)*100).toFixed(2) : 0; 
+        hDow += `<tr><td style="text-align:left;">${j}</td><td><strong>${c}</strong></td><td style="color:var(--text-muted);">${pct}%</td></tr>`; 
+    });
+    if(document.getElementById('ftfDowBody')) document.getElementById('ftfDowBody').innerHTML = hDow;
+    if(document.getElementById('ftfDowExtra')) document.getElementById('ftfDowExtra').innerHTML = `<b>${weekCount}</b> trouvailles en semaine (${((weekCount/totalFTF)*100).toFixed(1)}%) | <b>${weekendCount}</b> en week-end (${((weekendCount/totalFTF)*100).toFixed(1)}%)`;
+
+    // Appel de la grille 366 pour FTF
+    genererGrille366FTF(ftfList);
+}
+
+function genererGrille366FTF(ftfList) {
+    const container = document.getElementById('ftfGrid366Container');
+    if (!container || !ftfList || ftfList.length === 0) return;
+
+    window.donneesMoisJourFTF = {}; // Sauvegarde globale pour la modale
+    let joursCouverts = 0, colTotals = new Array(31).fill(0);
+    
+    ftfList.forEach(ftf => {
+        let md = ftf.date.substring(5, 10);
+        if(!window.donneesMoisJourFTF[md]) { window.donneesMoisJourFTF[md] = { total: 0, types: {} }; joursCouverts++; }
+        window.donneesMoisJourFTF[md].total++;
+        window.donneesMoisJourFTF[md].types[ftf.type] = (window.donneesMoisJourFTF[md].types[ftf.type] || 0) + 1;
+    });
+
+    document.getElementById('ftfGrid366Text').innerText = `${joursCouverts} dates de trouvaille sur 366 (${((joursCouverts/366)*100).toFixed(1)}%)`;
+
+    let html = '<table class="grid-366" style="margin: auto;"><tr><th></th>';
+    for(let i=1; i<=31; i++) html += `<th>${i}</th>`;
+    html += '<th class="total-cell">Total</th></tr>';
+
+    for(let m=0; m<12; m++) {
+        html += `<tr><th>${moisAbrev[m]}</th>`;
+        let rowTotal = 0;
+        for(let d=1; d<=31; d++) {
+            if (d > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m]) { html += '<td class="invalid">✖</td>'; } 
+            else {
+                const md = String(m+1).padStart(2,'0') + "-" + String(d).padStart(2,'0');
+                const count = window.donneesMoisJourFTF[md] ? window.donneesMoisJourFTF[md].total : 0;
+                rowTotal += count; colTotals[d-1] += count;
+                html += count > 0 ? `<td class="found" style="background-color: rgba(2, 135, 77, ${Math.min(0.3 + (count/5), 1)});" onclick="ouvrirModal366FTF('${md}')" style="cursor:pointer;" title="Cliquer pour voir le détail">${count}</td>` : `<td></td>`;
+            }
+        }
+        html += `<td class="total-cell">${rowTotal}</td></tr>`;
+    }
+    
+    html += '<tr><th class="total-cell">Total</th>';
+    for(let i=0; i<31; i++) html += `<td class="total-cell">${colTotals[i]}</td>`;
+    html += `<td class="grand-total">${colTotals.reduce((a,b)=>a+b,0)}</td></tr></table>`;
+    container.innerHTML = html;
+}
+
+// Fonction pour ouvrir la modale FTF
+function ouvrirModal366FTF(md) {
+    const data = window.donneesMoisJourFTF[md];
+    if (!data) return;
+    const [mois, jour] = md.split('-');
+    document.getElementById('modalDate').innerText = `🏆 FTF - Tous les ${jour} ${moisNomsFull[parseInt(mois)-1]}`;
+    document.getElementById('modalTotal').innerText = `Total historique : ${data.total} FTF`;
+    
+    document.getElementById('modalTypesList').innerHTML = Object.entries(data.types).sort((a, b) => b[1] - a[1]).map(item => 
+        `<li><div><span style="display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:10px; vertical-align:middle; background-color: ${gcColors[item[0]] || gcColors["Autre"]}"></span>${item[0]}</div><strong>${item[1]}</strong></li>`
+    ).join('');
+    document.getElementById('dayModal').style.display = 'block';
 }
 
 // === GESTION ONGLET TYPES/TAILLES ===
@@ -1435,7 +1977,55 @@ function switchDetailsTab(tab) {
 
 
 
+// === MODAL DÉTAIL D'UN FTF (clic sur une ligne de la liste FTF officiels) ===
+function ouvrirModalFtfDetail(nom, type, d, t, dateStr, gcCode) {
+    document.getElementById('modalDate').innerText = `🥇 ${nom}`;
+    document.getElementById('modalTotal').innerHTML = `Trouvée le ${dateStr} — Difficulté/Terrain : <strong>${d}/${t}</strong>` +
+        (gcCode ? ` — <a href="https://coord.info/${gcCode}" target="_blank" style="color:#3b82f6; font-weight:bold; text-decoration:none;">${gcCode}</a>` : '');
+
+    let color = gcColors[type] || gcColors["Autre"];
+    document.getElementById('modalTypesList').innerHTML =
+        `<li><div><span style="display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:10px; vertical-align:middle; background-color: ${color}"></span>${type}</div></li>`;
+
+    document.getElementById('dayModal').style.display = 'block';
+}
+
 // === MODAL MATRICE D/T (Affiche les types de caches au clic) ===
+// Ouvre la modale générique avec le détail d'une région cliquée sur une carte (pays ou monde)
+function ouvrirModalRegion(displayName, count, typesDetail) {
+    if (!count) return;
+    document.getElementById('modalDate').innerText = `🗺️ ${displayName}`;
+    document.getElementById('modalTotal').innerText = `Total : ${count} cache${count > 1 ? 's' : ''}`;
+
+    let htmlTypes = '';
+    if (typesDetail && Object.keys(typesDetail).length > 0) {
+        let sortedTypes = Object.entries(typesDetail).sort((a, b) => b[1] - a[1]);
+        sortedTypes.forEach(item => {
+            let color = gcColors[item[0]] || gcColors["Autre"];
+            htmlTypes += `<li><div><span style="display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:10px; vertical-align:middle; background-color: ${color}"></span>${item[0]}</div><strong>${item[1]}</strong></li>`;
+        });
+    } else {
+        htmlTypes = `<li style="justify-content:center; color:#94a3b8;">Détail par type non disponible</li>`;
+    }
+
+    document.getElementById('modalTypesList').innerHTML = htmlTypes;
+    document.getElementById('dayModal').style.display = 'block';
+}
+
+// Branche l'événement clic ("select") d'un GeoChart pour ouvrir la modale région.
+// rowsInfo[i] = { display, count, types } dans le même ordre que les lignes ajoutées au DataTable.
+function brancherClicCarte(chart, dataTable, rowsInfo) {
+    google.visualization.events.addListener(chart, 'select', function () {
+        let sel = chart.getSelection();
+        if (!sel || sel.length === 0) return;
+        let row = sel[0].row;
+        if (row === null || row === undefined) return;
+        let info = rowsInfo[row];
+        if (!info) return;
+        ouvrirModalRegion(info.display, info.count, info.types);
+    });
+}
+
 function ouvrirModalDT(d, t) {
     if (!window.matriceDetails) return;
     const dtInfo = window.matriceDetails[`${d}/${t}`];
@@ -1491,6 +2081,7 @@ function switchExploitsTab(tab) {
         btns[1].classList.toggle('active', tab === 'missedFtf');
         btns[2].classList.toggle('active', tab === 'milestones');
     }
+    if (tab === 'ftf' && window.lastFtfList) setTimeout(() => dessinerCarteFTFDynamique(window.lastFtfList), 100);
 }
 
 // =====================================================================
@@ -1537,16 +2128,72 @@ window.addEventListener('load', () => {
     }
 });
 
-// Vider les fichiers
+// === GESTION DE LA SUPPRESSION INDIVIDUELLE DES DONNÉES (TOUS LES BOUTONS 🗑️) ===
+// ⚠️ Cette fonction gère TOUS les cas (gpx, labs, draftTxt, draftGpx, ftfGpx, ftfTxt).
+// Un doublon de cette fonction existait plus loin dans le fichier et écrasait la gestion
+// des fichiers FTF (ftfGpx/ftfTxt), rendant les boutons 🗑️ de cette section inopérants.
 function clearSpecific(type) {
-    if (type === 'ftfGpx') { ftfGpxContent = ""; updateFtfBtn('ftfGpxBtn', false, ""); }
-    if (type === 'ftfTxt') { ftfTxtContent = ""; updateFtfBtn('ftfTxtBtn', false, ""); }
-    // Ajoute ici tes autres clearSpecific si nécessaire
+    if (type === 'gpx') {
+        localStorage.removeItem('gpxStats_final_vSEATTLE');
+        gpxStats = null;
+        let btn = document.getElementById('gpxBtn');
+        btn.innerHTML = "📁 Charger le fichier .gpx";
+        btn.style.background = "#f8fafc";
+        btn.style.color = "#475569";
+        btn.style.borderColor = "#cbd5e1";
+    } 
+    else if (type === 'labs') {
+        localStorage.removeItem('labStats_final_vSEATTLE');
+        labStats = null;
+        let btn = document.getElementById('csvBtn');
+        btn.innerHTML = "📁 Charger \"mes-labs.txt\"";
+        btn.style.background = "#f8fafc";
+        btn.style.color = "#475569";
+        btn.style.borderColor = "#cbd5e1";
+    } 
+    else if (type === 'draftTxt') {
+        localStorage.removeItem('draftTxt_final_vSEATTLE'); 
+        window.draftDates = {};
+        let btn = document.getElementById('draftTxtBtn');
+        btn.innerHTML = "📄 1. Charger .txt";
+        btn.style.background = "#f5f3ff";
+        btn.style.color = "#7c3aed";
+        btn.style.borderColor = "#8b5cf6";
+        if (document.getElementById('draftStatus')) document.getElementById('draftStatus').innerText = "🗑️ Dates TXT effacées.";
+    } 
+    else if (type === 'draftGpx') {
+        localStorage.removeItem('draftStats_final_vSEATTLE');
+        draftStats = null;
+        let btn = document.getElementById('draftBtn');
+        btn.innerHTML = "📁 2. Charger .gpx";
+        btn.style.background = "#eff6ff";
+        btn.style.color = "#2563eb";
+        btn.style.borderColor = "#3b82f6";
+    }
+    else if (type === 'ftfGpx') {
+        ftfGpxContent = "";
+        updateFtfBtn('ftfGpxBtn', false, "");
+    }
+    else if (type === 'ftfTxt') {
+        ftfTxtContent = "";
+        updateFtfBtn('ftfTxtBtn', false, "");
+    }
+    
+    compilerEtAfficher();
+}
+
+// 🔧 NORMALISATION DES APOSTROPHES : Geocaching.com et les claviers mobiles utilisent
+// indifféremment l'apostrophe droite (') et l'apostrophe typographique (' U+2019, ou ` U+0060).
+// Sans cette normalisation, des regex comme "l'avant" ne matchent QUE l'apostrophe droite,
+// ce qui fait passer à travers des cas pourtant prévus par le moteur (faux négatif silencieux).
+function normaliserApostrophes(texte) {
+    if (!texte) return "";
+    return texte.replace(/[\u2018\u2019\u02BC\u0060\u00B4]/g, "'");
 }
 
 // 🧠 CERVEAU : Analyse du texte pour éviter les "STF"
 function estUnFtfOublieValide(texteBrut) {
-    let texte = texteBrut.toLowerCase();
+    let texte = normaliserApostrophes(texteBrut).toLowerCase();
     
     // S'il y a déjà les crochets officiels, ce n'est pas un oubli !
     if (texte.includes("[ftf]") || texte.includes("{ftf}") || texte.includes("*ftf*") || texte.includes("(ftf)")) return false;
@@ -1577,33 +2224,27 @@ let ftfResults = [];
 
 // 🧠 FILTRE 1 : Tag officiel explicite
 function estOfficiellementTaggue(texte) {
-    return /\{\*ftf\*\}|\{ftf\}|\[ftf\]|\(ftf\)/i.test(texte);
+    return /\{\*ftf\*\}|\{ftf\}|\[ftf\]|\(ftf\)/i.test(normaliserApostrophes(texte));
 }
 
 // 🧠 FILTRE 2 : Aveux d'échec stricts
 function contientNegationSTF(texte) {
-    return /\b(pas de ftf|pas ftf|no ftf|aucun ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|les deuxièmes|les 2ème|les 2eme|suis 2ème|suis deuxième|sommes 2ème|sommes deuxième|devancé)\b/i.test(texte);
+    return /\b(pas de ftf|pas ftf|no ftf|aucun ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|les deuxièmes|les 2ème|les 2eme|suis 2ème|suis deuxième|sommes 2ème|sommes deuxième|devancé)\b/i.test(normaliserApostrophes(texte));
 }
 
 // 🧠 FILTRE 3 : Les Quiproquos Contextuels (NOUVEAU)
 // Détecte les phrases où le mot FTF est utilisé, mais pour parler d'une AUTRE cache.
 function contientFauxPositifFTF(texte) {
-    return /(ftf sur l'avant|ftf sur la préc|pas.*?en ftf|ftf.*sur une autre|aucun.*?ftf)/i.test(texte);
+    return /(ftf sur l'avant|ftf sur la préc|pas.*?en ftf|ftf.*sur une autre|aucun.*?ftf)/i.test(normaliserApostrophes(texte));
 }
 
 // 🧠 FILTRE 4 : Preuve positive (sans les crochets)
 function contientPreuveFTF(texte) {
-    return /\b(ftf|premier|preum's|preums|patbf|first to find)\b/i.test(texte) || /en premier/i.test(texte);
+    let t = normaliserApostrophes(texte);
+    return /\b(ftf|premier|preum's|preums|patbf|first to find)\b/i.test(t) || /en premier/i.test(t);
 }
 
-// 🧹 NETTOYEUR ULTIME : Normalisation stricte
-function nettoyerNomCache(nom) {
-    if (!nom) return "";
-    nom = nom.split(/ by /i)[0].trim(); 
-    return nom.toLowerCase()
-              .normalize("NFD").replace(/[\u0300-\u036f]/g, "") 
-              .replace(/[^a-z0-9]/g, ""); 
-}
+// (nettoyerNomCache est déjà défini plus haut dans le fichier — doublon supprimé)
 
 function echapperHtml(str) {
     return (str || "").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -1625,9 +2266,18 @@ function calculerProbabilite(c) {
 
     // 2. Poids du fichier GPX (La Chronologie)
     if (c.gpxFound) {
-        if (c.isFirstGpxLog) score += 30; 
-        else score -= 40;                 
-        
+        // On utilise le flag fiable : un AUTRE joueur a-t-il réellement loggué
+        // "found it" / "attended" avant lui ? Une simple "write note" (note du
+        // propriétaire, du reviewer, etc.) ne compte pas comme une découverte concurrente.
+        if (c.autreDecouverteAvant === true) {
+            score -= 40; // Quelqu'un d'autre a vraiment trouvé/assisté avant : doute légitime
+        } else if (c.isFirstGpxLog) {
+            score += 30; // Premier log "valide" dans le GPX : bon signe
+        }
+        // Si autreDecouverteAvant est false et isFirstGpxLog est aussi false (ex: seule une
+        // write note du propriétaire précède le joueur), on ne pénalise plus à tort : on
+        // laisse le score du TXT (poids des logs Project-GC) parler.
+
         if (c.isFirstGpxLog && c.hasPublish) score += 20; 
     }
 
@@ -1679,6 +2329,7 @@ function lancerAnalyseFtfOublies() {
                         source: "Project-GC", 
                         gcCode: "P-GC", 
                         name: parts[1].trim(), 
+                        type: parts[0] ? parts[0].trim() : "", // Type de cache (1ère colonne du TXT Project-GC)
                         date: parts[2].trim(), 
                         txtNumLogs: parseInt(parts[3].trim(), 10) || 0, // Récupération parfaite du nombre de logs
                         fullText: "", 
@@ -1718,12 +2369,20 @@ function lancerAnalyseFtfOublies() {
                         if (log.getElementsByTagNameNS("*", "type")[0]?.textContent === "Publish Listing") publishLog = log;
                         let finder = log.getElementsByTagNameNS("*", "finder")[0]?.textContent.toLowerCase();
                         let text = log.getElementsByTagNameNS("*", "text")[0]?.textContent || "";
-                        if (["found it", "attended", "write note"].includes(log.getElementsByTagNameNS("*", "type")[0]?.textContent.toLowerCase())) {
-                            validLogs.push({ finder, id: parseInt(log.getAttribute("id")), text });
+                        let typeLog = log.getElementsByTagNameNS("*", "type")[0]?.textContent.toLowerCase();
+                        if (["found it", "attended", "write note"].includes(typeLog)) {
+                            // On garde une trace du type pour pouvoir distinguer plus loin
+                            // une VRAIE découverte (found it / attended) d'une simple note (write note),
+                            // qui ne prouve absolument rien sur un éventuel FTF concurrent.
+                            validLogs.push({ finder, id: parseInt(log.getAttribute("id")), text, typeLog, estDecouverte: (typeLog === "found it" || typeLog === "attended") });
                         }
                     }
                     validLogs.sort((a,b) => a.id - b.id); // Tri chronologique
                     let userLogs = validLogs.filter(l => l.finder === pseudo);
+                    // On ne regarde que les VRAIES découvertes d'AUTRES joueurs pour juger d'un FTF concurrent.
+                    // Une "write note" (note du propriétaire, du reviewer, ou même du joueur lui-même avant
+                    // de logguer "found it") ne prouve rien : elle ne doit pas faire chuter le score.
+                    let decouvertesAutres = validLogs.filter(l => l.estDecouverte && l.finder !== pseudo);
 
                     // Vérifier si quelqu'un a crié victoire AVANT le premier log du joueur
                     for(let l of validLogs) { 
@@ -1739,6 +2398,9 @@ function lancerAnalyseFtfOublies() {
                     existing.hasPublish = (publishLog !== null);
                     existing.someoneElseSaidFtf = someoneElseSaidFtf;
                     existing.isFirstGpxLog = (validLogs.length > 0 && userLogs.length > 0 && validLogs[0].id === userLogs[0].id);
+                    // Nouveau flag, plus fiable : un AUTRE joueur a-t-il réellement trouvé/assisté avant lui ?
+                    // (en ignorant les simples "write note" qui ne sont pas des découvertes)
+                    existing.autreDecouverteAvant = (userLogs.length > 0) && decouvertesAutres.some(l => l.id < userLogs[0].id);
 
                     if (userLogs.length > 0) {
                         existing.fullText += " " + userLogs.map(l => l.text).join(" ");
@@ -1758,12 +2420,11 @@ function lancerAnalyseFtfOublies() {
                     exclusResults.push({ date: c.date, name: c.name, log: fullTxt, raison: "✅ Déjà taggué officiel" });
                     continue;
                 }
-                
-                // 🧠 FILTRE 2 : Est-ce qu'il y a un aveu d'échec sur le terrain ?
-                function contientNegationSTF(texte) {
-                    // Regex affinée : on retire "deuxième" tout seul pour éviter les faux positifs ("au deuxième passage").
-                    // On cible spécifiquement les expressions qui indiquent un STF.
-                    return /\b(pas de ftf|pas ftf|no ftf|aucun ftf|loupé le ftf|raté le ftf|ftf loupé|ftf raté|stf|ttf|les deuxièmes|les 2ème|les 2eme|suis 2ème|suis deuxième|sommes 2ème|sommes deuxième|devancé)\b/i.test(texte);
+
+                // Filtre 2 : Aveu d'échec explicite (STF, etc.) — voir contientNegationSTF() plus haut dans le fichier
+                if (contientNegationSTF(fullTxt)) {
+                    exclusResults.push({ date: c.date, name: c.name, log: fullTxt, raison: "🧊 Aveu d'échec (STF) détecté" });
+                    continue;
                 }
 
                 // LE NOUVEAU FILTRE EST ICI :
@@ -1834,11 +2495,18 @@ function afficherTableauFtfOublies() {
             ? `<a href="https://coord.info/${ftf.gcCode}" target="_blank" style="color:#2563eb; text-decoration:none; font-weight:bold;">${ftf.gcCode}</a>`
             : `<span style="color:#64748b; font-weight:bold;">${ftf.gcCode || 'P-GC'}</span>`;
 
+        // NOUVEAU : Ajout du log déroulant cliquable
+        let safeId = "log-" + Math.random().toString(36).substr(2, 5);
         html += `
-        <tr>
+        <tr style="cursor:pointer; transition: background 0.2s;" onclick="let el = document.getElementById('${safeId}'); el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';" onmouseover="this.style.background='#f1f5f9';" onmouseout="this.style.background='transparent';">
             <td style="font-size:12px;"><strong>${dStr}</strong><br><span style="color:#94a3b8; font-size:10px;">${ftf.source || ''}</span></td>
             <td style="text-align:center;"><span style="background:${colorProba}22; color:${colorProba}; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:12px;">${iconProba} ${ftf.proba}%</span></td>
-            <td>${gcLink}<br><span style="font-size:13px;">${escHtml(ftf.name)}</span></td>
+            <td>${gcLink}<br><span style="font-size:13px;">${escHtml(ftf.name)}</span> <span style="font-size:10px; color:#94a3b8; float:right;">👁️ Voir le log ▼</span></td>
+        </tr>
+        <tr id="${safeId}" style="display:none; background:var(--bg);">
+            <td colspan="3" style="padding: 15px; font-style: italic; color: var(--text-muted); font-size: 12px; white-space: pre-wrap; border-left: 4px solid ${colorProba};">
+                <strong>📝 Contenu du log complet :</strong><br>${escHtml(ftf.fullText)}
+            </td>
         </tr>`;
     });
 
@@ -1847,6 +2515,34 @@ function afficherTableauFtfOublies() {
 
 function filtrerTableauFtf() {
     afficherTableauFtfOublies();
+}
+
+// 🧭 NAVIGATION PRINCIPALE PAR ONGLETS (façon navigateur) : un seul panneau visible à la fois,
+// pour éviter d'avoir à tout scroller sur une page interminable.
+const MAIN_TABS = ['overview', 'calendar', 'matrix', 'maps', 'ftf', 'challenge360', 'tools'];
+function switchMainTab(tabId) {
+    MAIN_TABS.forEach(id => {
+        const panel = document.getElementById('panel-' + id);
+        if (panel) panel.style.display = (id === tabId) ? 'block' : 'none';
+    });
+    document.querySelectorAll('.main-tab-btn').forEach(btn => btn.classList.remove('active'));
+    if (event && event.currentTarget) event.currentTarget.classList.add('active');
+    
+    // CORRECTION DU BUG CALENDRIER : Forcer le redessin quand l'onglet devient visible
+    if (tabId === 'calendar' && typeof fullCalendarInstance !== 'undefined' && fullCalendarInstance) {
+        setTimeout(() => { fullCalendarInstance.render(); }, 100);
+    }
+    
+    const bar = document.getElementById('mainTabsBar');
+    if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    try { localStorage.setItem('mainTab_actif', tabId); } catch (e) {}
+}
+
+// 🆘 GESTION GÉNÉRIQUE DES BOÎTES D'AIDE (❓) — utilisée sur tout le dashboard
+function toggleAide(id) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    box.style.display = (box.style.display === 'none' || box.style.display === '') ? 'block' : 'none';
 }
 
 // 🗑️ GESTION DU TIROIR DES CACHES EXCLUES
@@ -1890,30 +2586,7 @@ function afficherExclus() {
 }
 
 // 🗑️ GESTION DU TIROIR DES CACHES EXCLUES
-function afficherExclus() {
-    document.getElementById('exclusCount').innerText = exclusResults.length;
-    let container = document.getElementById('exclusContent');
-    
-    if (exclusResults.length === 0) {
-        container.innerHTML = `<p style="color: #94a3b8; text-align: center; margin: 5px;">Aucune exclusion pour le moment.</p>`;
-        return;
-    }
-
-    exclusResults.sort((a, b) => new Date(b.date) - new Date(a.date));
-    let html = '';
-    exclusResults.forEach(e => {
-        let textLogShort = escHtml(e.log.substring(0, 150)) + (e.log.length > 150 ? '...' : '');
-        html += `
-        <div style="border-bottom: 1px solid #e2e8f0; padding: 8px 0;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <strong style="color: #1e293b; font-size: 13px;">${escHtml(e.name)}</strong>
-                <span style="background:#fee2e2; color:#dc2626; padding:2px 6px; border-radius:4px; font-weight:bold; font-size: 11px;">${e.raison}</span>
-            </div>
-            <div style="color: #64748b; margin-top: 4px; font-style: italic;">"${textLogShort}"</div>
-        </div>`;
-    });
-    container.innerHTML = html;
-}
+// (afficherExclus est déjà défini plus haut dans le fichier — doublon supprimé)
 
 // === RACCOURCIS CLAVIER ===
 document.addEventListener('keydown', function(event) {
@@ -1971,87 +2644,9 @@ document.addEventListener('keydown', function(event) {
     }
 });
 
-// === GESTION DE LA SUPPRESSION INDIVIDUELLE DES DONNÉES (LES 4 BOUTONS) ===
-function clearSpecific(type) {
-    if (type === 'gpx') {
-        localStorage.removeItem('gpxStats_final_vSEATTLE');
-        gpxStats = null;
-        let btn = document.getElementById('gpxBtn');
-        btn.innerHTML = "📁 Charger le fichier .gpx";
-        btn.style.background = "#f8fafc";
-        btn.style.color = "#475569";
-        btn.style.borderColor = "#cbd5e1";
-    } 
-    else if (type === 'labs') {
-        localStorage.removeItem('labStats_final_vSEATTLE');
-        labStats = null;
-        let btn = document.getElementById('csvBtn');
-        btn.innerHTML = "📁 Charger \"mes-labs.txt\"";
-        btn.style.background = "#f8fafc";
-        btn.style.color = "#475569";
-        btn.style.borderColor = "#cbd5e1";
-    } 
-    else if (type === 'draftTxt') {
-        localStorage.removeItem('draftTxt_final_vSEATTLE'); 
-        window.draftDates = {};
-        let btn = document.getElementById('draftTxtBtn');
-        btn.innerHTML = "📄 1. Charger .txt";
-        btn.style.background = "#f5f3ff";
-        btn.style.color = "#7c3aed";
-        btn.style.borderColor = "#8b5cf6";
-        if (document.getElementById('draftStatus')) document.getElementById('draftStatus').innerText = "🗑️ Dates TXT effacées.";
-    } 
-    else if (type === 'draftGpx') {
-        localStorage.removeItem('draftStats_final_vSEATTLE');
-        draftStats = null;
-        let btn = document.getElementById('draftBtn');
-        btn.innerHTML = "📁 2. Charger .gpx";
-        btn.style.background = "#eff6ff";
-        btn.style.color = "#2563eb";
-        btn.style.borderColor = "#3b82f6";
-    }
-    
-    compilerEtAfficher();
-}
+// (clearSpecific est déjà défini plus haut dans le fichier, fusionné avec la gestion des fichiers FTF — doublon supprimé)
 
-// === FONCTION DE NETTOYAGE AUTOMATIQUE (Brouillons & Project-GC) ===
-function nettoyerTexteGeocaching(texteBrut) {
-    let lignes = texteBrut.split('\n').map(l => l.trim());
-    let textePropre = "";
-    
-    for (let i = 0; i < lignes.length; i++) {
-        let ligne = lignes[i];
-        if (!ligne) continue;
-
-        // --- CAS 1 : TABLEAU PROJECT-GC LAB CACHES ---
-        // Format attendu : "1	2023-08-16	Nom de la cache	82"
-        let matchPGC = ligne.match(/^\d+[\t\s]+(\d{4}-\d{2}-\d{2})[\t\s]+(.+?)[\t\s]+\d+$/);
-        if (matchPGC) {
-            let parts = matchPGC[1].split('-');
-            // Conversion YYYY-MM-DD en DD/MM/YYYY
-            textePropre += `Found it: ${parts[2]}/${parts[1]}/${parts[0]}\n${matchPGC[2].trim()}\n\n`;
-            continue;
-        }
-
-        // --- CAS 2 : COPIER-COLLER GEOCACHING.COM (Brouillons bruts) ---
-        // Recherche des lignes contenant le type de log et la date
-        let matchTypeDate = ligne.match(/^(Found it|Write note|Didn't find it|Disable|Archive|Needs Maintenance|Webcam Photo Taken|Attended):\s*(\d{2}\/\d{2}\/\d{4})/i);
-        
-        if (matchTypeDate) {
-            // Sous-cas A : Le nom de la cache est sur la ligne DU DESSUS (Format brut Geocaching)
-            if (i > 0 && lignes[i-1] && !lignes[i-1].match(/^(Found it|Write note|Didn't find it|Disable|Archive|Needs Maintenance)/i)) {
-                textePropre += `${matchTypeDate[0]}\n${lignes[i-1]}\n\n`;
-            } 
-            // Sous-cas B : Le nom de la cache est sur la ligne DU DESSOUS (Texte déjà propre)
-            else if (i + 1 < lignes.length && lignes[i+1] && !lignes[i+1].match(/^(Found it|Write note|Didn't find it|Disable|Archive|Needs Maintenance)/i)) {
-                textePropre += `${matchTypeDate[0]}\n${lignes[i+1]}\n\n`;
-            }
-        }
-    }
-    
-    // Si le nettoyage n'a rien trouvé, on retourne le texte original par sécurité
-    return textePropre.trim() !== "" ? textePropre.trim() : texteBrut.trim();
-}
+// (nettoyerTexteGeocaching est déjà défini plus haut dans le fichier — doublon supprimé)
 
 // === GESTION DU THEME SOMBRE (CORRECTION GRAPHIQUES) ===
 function applyTheme(isDark) {
@@ -2108,105 +2703,541 @@ window.addEventListener('load', () => {
 });
 
 
+// =====================================================================
+// === MODULE CARTES CHOROPLÈTHES DYNAMIQUES (GOOGLE GEOCHARTS) ========
+// =====================================================================
 
+// Chargement UNIQUE de Google Charts au démarrage
+let googleChartsReady = false;
+let pendingGeoCallback = null;
+
+if (typeof google !== 'undefined') {
+    google.charts.load('current', { 'packages': ['geochart'], 'language': 'fr' });
+    google.charts.setOnLoadCallback(() => {
+        googleChartsReady = true;
+        if (pendingGeoCallback) { pendingGeoCallback(); pendingGeoCallback = null; }
+    });
+}
+
+function appellerQuandGooglePret(fn) {
+    if (googleChartsReady) { fn(); }
+    else { pendingGeoCallback = fn; }
+}
+
+// 1. Traduction pour l'affichage (Onglets et textes)
+function getNomPaysFR(c) {
+    const dict = {
+        "Belgium": "Belgique", "Germany": "Allemagne", "Netherlands": "Pays-Bas", 
+        "United Kingdom": "Royaume-Uni", "Switzerland": "Suisse", "Spain": "Espagne", 
+        "Italy": "Italie", "United States": "États-Unis", "Sweden": "Suède", "Norway": "Norvège",
+        "Finland": "Finlande", "Denmark": "Danemark", "Poland": "Pologne", "Czechia": "Tchéquie", "Ireland": "Irlande"
+    };
+    return dict[c] || c;
+}
+
+// 2. Traduction pour Google GeoCharts (Il comprend mieux l'Anglais pour le monde entier)
+function getGoogleCountryName(c) {
+    const dict = {
+        "Belgique": "Belgium", "Allemagne": "Germany", "Pays-Bas": "Netherlands", 
+        "Royaume-Uni": "United Kingdom", "Suisse": "Switzerland", "Espagne": "Spain", 
+        "Italie": "Italy", "États-Unis": "United States", "Suède": "Sweden", "Norvège": "Norway",
+        "Finlande": "Finland", "Danemark": "Denmark", "Pologne": "Poland", "Tchéquie": "Czechia", "Irlande": "Ireland"
+    };
+    return dict[c] || c;
+}
+
+// Code ISO pour cibler/zoomer la carte sur un pays spécifique
+function getIsoForZoom(c) {
+    const dict = {
+        "France": "FR", "Belgium": "BE", "Belgique": "BE", "Germany": "DE", "Netherlands": "NL",
+        "United Kingdom": "GB", "Switzerland": "CH", "Spain": "ES", "Italy": "IT",
+        "United States": "US", "Canada": "CA"
+    };
+    return dict[c] || c;
+}
+
+// Normalise une chaîne pour la comparaison (accents, casse, espaces multiples, tirets)
+function normaliserPourComparaison(str) {
+    return str.toLowerCase()
+        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+        .replace(/[-_]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+// 3. LE TRADUCTEUR MAGIQUE DE RÉGIONS (Le secret pour la France et la Belgique !)
+function getGoogleRegionName(country, state) {
+    if (!state) return state;
+    let s = state.trim();
+    let sNorm = normaliserPourComparaison(s);
+
+    // FRANCE : Rétrocompatibilité avec la carte 2015 de Google
+    if (country === 'France') {
+        const frMap = {
+            "ile de france": "Ile-de-France",
+            "centre val de loire": "Centre", "centre": "Centre",
+            "bourgogne franche comte": "Bourgogne", "auvergne rhone alpes": "Rhône-Alpes",
+            "bretagne": "Bretagne", "pays de la loire": "Pays de la Loire",
+            "hauts de france": "Picardie", "normandie": "Haute-Normandie",
+            "grand est": "Alsace", "occitanie": "Midi-Pyrénées",
+            "nouvelle aquitaine": "Aquitaine", "provence alpes cote d azur": "Provence-Alpes-Côte d'Azur",
+            "paca": "Provence-Alpes-Côte d'Azur", "corse": "Corse"
+        };
+        if (!frMap[sNorm]) console.warn(`[Cartes] Région française non reconnue dans le mapping : "${s}" (normalisée: "${sNorm}"). Elle sera envoyée telle quelle à Google, qui peut échouer à la colorer.`);
+        return frMap[sNorm] || s;
+    }
+
+    // BELGIQUE : les noms anglais ("Antwerp", "Hainaut"...) sont ambigus pour Google GeoCharts
+    // et ne se colorent pas de façon fiable. On utilise les codes officiels ISO 3166-2:BE,
+    // qui sont la forme recommandée par Google pour le mode "regions".
+    if (country === 'Belgium' || country === 'Belgique') {
+        const beMap = {
+            // Bruxelles
+            "bruxelles": "BE-BRU",
+            "brussels": "BE-BRU",
+            "region de bruxelles capitale": "BE-BRU",
+            "bruxelles capitale": "BE-BRU",
+            "brussels capital region": "BE-BRU",
+            "region bruxelles": "BE-BRU",
+            // Brabant Wallon
+            "brabant wallon": "BE-WBR",
+            "walloon brabant": "BE-WBR",
+            // Hainaut
+            "hainaut": "BE-WHT",
+            // Liège
+            "liege": "BE-WLG",
+            "liège": "BE-WLG",
+            "province de liege": "BE-WLG",
+            // Luxembourg (Belgique)
+            "luxembourg be": "BE-WLX",
+            "luxembourg": "BE-WLX",
+            "province de luxembourg": "BE-WLX",
+            // Namur
+            "namur": "BE-WNA",
+            "province de namur": "BE-WNA",
+            // Brabant Flamand
+            "brabant flamand": "BE-VBR",
+            "flemish brabant": "BE-VBR",
+            "vlaams brabant": "BE-VBR",
+            // Anvers
+            "anvers": "BE-VAN",
+            "antwerp": "BE-VAN",
+            "antwerpen": "BE-VAN",
+            "province d anvers": "BE-VAN",
+            // Limbourg
+            "limbourg": "BE-VLI",
+            "limburg": "BE-VLI",
+            // Flandre Orientale
+            "flandre orientale": "BE-VOV",
+            "east flanders": "BE-VOV",
+            "oost vlaanderen": "BE-VOV",
+            // Flandre Occidentale
+            "flandre occidentale": "BE-VWV",
+            "west flanders": "BE-VWV",
+            "west vlaanderen": "BE-VWV",
+            // Grandes régions (au cas où le GPX ne donne que Flandre/Wallonie, pas la province) :
+            // pas de code province unique possible ici, on les laisse non mappées (voir le warning).
+        };
+        if (!beMap[sNorm]) console.warn(`[Cartes] Région belge non reconnue dans le mapping : "${s}" (normalisée: "${sNorm}"). Si ton GPX donne "Flandre"/"Wallonie" au lieu d'une province précise, c'est la cause : Google a besoin du nom de PROVINCE, pas de la grande région linguistique.`);
+        return beMap[sNorm] || s;
+    }
+
+    return s;
+}
+
+// Base de données des totaux de régions pour affichage "X sur Y ont été loguées"
+const TOTAL_REGIONS = {
+    "France": 13, "Belgium": 11, "Belgique": 11, "Germany": 16, "Allemagne": 16,
+    "United States": 50, "États-Unis": 50, "Canada": 13, "Switzerland": 26, "Suisse": 26,
+    "Spain": 17, "Espagne": 17, "Netherlands": 12, "Pays-Bas": 12, "United Kingdom": 4, "Royaume-Uni": 4
+};
+
+var activeMapTab = 'world';
+
+function initCartesDynamiques(locationsData) {
+    if (!locationsData || !document.getElementById('geoMapsCard')) return;
+    document.getElementById('geoMapsCard').style.display = 'block';
+
+    let countries = Object.keys(locationsData).filter(c => c !== 'Inconnu' && locationsData[c].count > 0);
+    countries.sort((a, b) => locationsData[b].count - locationsData[a].count);
+    let topCountries = countries.slice(0, 5);
+
+    let globalTotal = 0;
+    let allCountriesArr = [];
+    countries.forEach(c => {
+        globalTotal += locationsData[c].count;
+        allCountriesArr.push({ name: getNomPaysFR(c), count: locationsData[c].count });
+    });
+
+    // Chips des pays
+    let chipsHtml = allCountriesArr.map(st => {
+        let pct = globalTotal > 0 ? ((st.count / globalTotal) * 100).toFixed(1) : 0;
+        return `<span class="geo-chip">🚩 ${st.name} <strong>${st.count}</strong> <span style="opacity:0.7">(${pct}%)</span></span>`;
+    }).join('');
+
+    let legendeHtml = `
+        <p style="text-align:center; font-size:11px; color:var(--text-muted); margin:10px 0 0; font-weight:600;">👆 Cliquez sur une zone colorée pour voir le détail des types</p>`;
+
+    let worldSummaryHtml = `
+        <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border, #e2e8f0);">
+            <p style="text-align:center; font-size:13px; color:var(--text-muted); margin:0 0 10px;">
+                <strong>${allCountriesArr.length} pays</strong> loggués
+            </p>
+            <div class="geo-summary-chips">${chipsHtml}</div>
+        </div>`;
+
+    // Onglets
+    let tabsHtml = `<button class="tab-btn ${activeMapTab === 'world' ? 'active' : ''}" data-count="${allCountriesArr.length}" onclick="changerOngletCarte('world')">🌍 Monde</button>`;
+
+    // Conteneur monde
+    let containersHtml = `
+        <div id="tabGeoMap-world" style="display:${activeMapTab === 'world' ? 'block' : 'none'}; padding-top:16px;">
+            <div class="geo-world-grid">
+                <div>
+                    <h4 style="text-align:center; color:var(--primary); margin:0 0 10px; font-size:14px;">🌐 Carte du Monde</h4>
+                    <div id="map_world"></div>
+                    ${legendeHtml}
+                </div>
+                <div>
+                    <h4 style="text-align:center; color:var(--primary); margin:0 0 10px; font-size:14px;">🇪🇺 Europe</h4>
+                    <div id="map_europe"></div>
+                    ${legendeHtml}
+                </div>
+            </div>
+            ${worldSummaryHtml}
+        </div>`;
+
+    // Onglets et conteneurs par pays
+    topCountries.forEach(c => {
+        const safeId = c.replace(/[^a-zA-Z0-9]/g, '');
+        const nomPaysAffiche = getNomPaysFR(c);
+
+        let statesArr = Object.keys(locationsData[c].states)
+            .filter(s => s && s !== 'Inconnue' && (typeof locationsData[c].states[s] === 'object' ? locationsData[c].states[s].count : locationsData[c].states[s]) > 0)
+            .map(s => {
+                let stateData = locationsData[c].states[s];
+                let count = typeof stateData === 'object' ? stateData.count : stateData;
+                let types = typeof stateData === 'object' ? (stateData.types || {}) : {};
+                return { name: s, count, types };
+            })
+            .sort((a, b) => b.count - a.count);
+
+        const nbFound = statesArr.length;
+        const nbTotalRegions = TOTAL_REGIONS[nomPaysAffiche] || TOTAL_REGIONS[c] || null;
+        const nbTotalStr = nbTotalRegions ? ` / ${nbTotalRegions}` : '';
+
+        // Barre de progression régions
+        const pctRegions = nbTotalRegions ? Math.round((nbFound / nbTotalRegions) * 100) : null;
+        let progressHtml = pctRegions !== null ? `
+            <div style="margin: 0 0 12px; display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text-muted); font-weight:700;">
+                <span>${nbFound}${nbTotalStr} régions</span>
+                <div style="flex:1; background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;">
+                    <div style="width:${pctRegions}%; height:100%; background:linear-gradient(90deg,#10b981,#047857); border-radius:6px;"></div>
+                </div>
+                <span>${pctRegions}%</span>
+            </div>` : '';
+
+        // Chips des régions avec détail des types
+        let countryTypes = locationsData[c].types || {};
+        let topCountryTypes = Object.entries(countryTypes).sort((a,b) => b[1]-a[1]).slice(0,5);
+        let countryTypesHtml = topCountryTypes.map(([t,n]) => 
+            `<span class="geo-chip" style="font-size:11px; background:#f0fdf4; color:#166534; border-color:#86efac;">
+                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gcColors[t]||'#888'};margin-right:4px;"></span>${t} <strong>${n}</strong>
+            </span>`
+        ).join('');
+
+        let regChipsHtml = statesArr.slice(0, 30).map(st => {
+            const pct = ((st.count / locationsData[c].count) * 100).toFixed(1);
+            let topTypes = Object.entries(st.types || {}).sort((a,b) => b[1]-a[1]).slice(0,3).map(([t,n]) => `${t}: ${n}`).join(' | ');
+            let title = topTypes ? ` title="${topTypes}"` : '';
+            return `<span class="geo-chip"${title}>📍 ${st.name} <strong>${st.count}</strong> <span style="opacity:0.7">(${pct}%)</span></span>`;
+        }).join('');
+
+        tabsHtml += `<button class="tab-btn ${activeMapTab === safeId ? 'active' : ''}" data-count="${locationsData[c].count}" onclick="changerOngletCarte('${safeId}')">${nomPaysAffiche}</button>`;
+
+        containersHtml += `
+        <div id="tabGeoMap-${safeId}" style="display:${activeMapTab === safeId ? 'block' : 'none'}; padding-top:16px;">
+            <h4 style="text-align:center; color:var(--primary); margin:0 0 12px; font-size:15px; font-weight:800;">
+                🗺️ ${nomPaysAffiche} — répartition par région
+            </h4>
+            ${progressHtml}
+            <div id="map_${safeId}" style="width:100%; height:480px; border-radius:12px; border:1px solid var(--border,#e2e8f0); overflow:hidden; background:#dbeafe;"></div>
+            <p style="text-align:center; font-size:11px; color:var(--text-muted); margin:8px 0 0; font-weight:600;">👆 Cliquez sur une zone colorée pour voir le détail des types</p>
+            ${countryTypesHtml ? `<div style="margin-top:12px; padding:10px 14px; background:var(--bg); border-radius:8px; border:1px solid var(--border,#e2e8f0);">
+                <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:var(--text-muted);">📦 Types trouvés au ${nomPaysAffiche} :</p>
+                <div style="display:flex; flex-wrap:wrap; gap:6px;">${countryTypesHtml}</div>
+            </div>` : ''}
+            <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border,#e2e8f0);">
+                <p style="text-align:center; font-size:12px; color:var(--text-muted); margin:0 0 10px; font-weight:700;">
+                    Top régions (${statesArr.length}${nbTotalStr}) — survolez pour voir les types
+                </p>
+                <div class="geo-summary-chips">${regChipsHtml}</div>
+            </div>
+        </div>`;
+    });
+
+    document.getElementById('dynamicMapTabs').innerHTML = tabsHtml;
+    document.getElementById('dynamicMapContainers').innerHTML = containersHtml;
+
+    appellerQuandGooglePret(() => {
+        dessinerCartesActive(locationsData, topCountries);
+    });
+}
+
+function changerOngletCarte(tabId) {
+    activeMapTab = tabId;
+    initCartesDynamiques(window.lastLocationsData);
+    appellerQuandGooglePret(() => {
+        let countries = Object.keys(window.lastLocationsData || {}).filter(c => c !== "Inconnu" && window.lastLocationsData[c].count > 0);
+        countries.sort((a, b) => window.lastLocationsData[b].count - window.lastLocationsData[a].count);
+        dessinerCartesActive(window.lastLocationsData, countries.slice(0, 5));
+    });
+}
+
+function dessinerCartesActive(locationsData, topCountries) {
+    if (!locationsData) return;
+    const isDark = document.body.classList.contains('dark-mode');
+
+    const optionsBase = {
+        backgroundColor: { fill: isDark ? '#1e293b' : '#dbeafe' },
+        datalessRegionColor: isDark ? '#334155' : '#e2e8f0',
+        defaultColor: isDark ? '#475569' : '#cbd5e1',
+        colorAxis: { minValue: 0, colors: ['#bbf7d0', '#059669', '#064e3b'] },
+        legend: 'none',
+        tooltip: { isHtml: false },
+        keepAspectRatio: true, // vue à plat "du dessus" : évite que la carte soit étirée/déformée
+    };
+
+    if (activeMapTab === 'world') {
+        let dataWorld = new google.visualization.DataTable();
+        dataWorld.addColumn('string', 'Pays');
+        dataWorld.addColumn('number', 'Trouvailles');
+        let rowsInfoWorld = [];
+        for (let country in locationsData) {
+            let googleCountry = getGoogleCountryName(country);
+            let displayCountry = getNomPaysFR(country);
+            dataWorld.addRow([{ v: googleCountry, f: displayCountry }, locationsData[country].count]);
+            rowsInfoWorld.push({ display: displayCountry, count: locationsData[country].count, types: locationsData[country].types || {} });
+        }
+        const mapWorld = document.getElementById('map_world');
+        const mapEurope = document.getElementById('map_europe');
+        if (mapWorld) {
+            const chartWorld = new google.visualization.GeoChart(mapWorld);
+            chartWorld.draw(dataWorld, { ...optionsBase, enableRegionInteractivity: true });
+            brancherClicCarte(chartWorld, dataWorld, rowsInfoWorld);
+        }
+        if (mapEurope) {
+            const chartEurope = new google.visualization.GeoChart(mapEurope);
+            chartEurope.draw(dataWorld, { ...optionsBase, region: '150', enableRegionInteractivity: true });
+            brancherClicCarte(chartEurope, dataWorld, rowsInfoWorld);
+        }
+    } else {
+        let c = topCountries.find(x => x.replace(/[^a-zA-Z0-9]/g, '') === activeMapTab);
+        if (!c) return;
+        const codeIsoPays = getIsoForZoom(c);
+        const mapEl = document.getElementById(`map_${activeMapTab}`);
+        if (!mapEl) return;
+
+        let dataCountry = new google.visualization.DataTable();
+        dataCountry.addColumn('string', 'Région');
+        dataCountry.addColumn('number', 'Trouvailles');
+        let rowsInfoCountry = [];
+
+        let maxVal = 0;
+        for (let state in locationsData[c].states) {
+            if (state && state !== 'Inconnue') {
+                let stateData = locationsData[c].states[state];
+                let cnt = typeof stateData === 'object' ? stateData.count : stateData;
+                if (cnt > 0) maxVal = Math.max(maxVal, cnt);
+            }
+        }
+        for (let state in locationsData[c].states) {
+            if (state && state !== 'Inconnue') {
+                let stateData = locationsData[c].states[state];
+                let cnt = typeof stateData === 'object' ? stateData.count : stateData;
+                let typesData = typeof stateData === 'object' ? (stateData.types || {}) : {};
+                if (cnt > 0) {
+                    const googleState = getGoogleRegionName(c, state);
+                    dataCountry.addRow([{ v: googleState, f: state }, cnt]);
+                    rowsInfoCountry.push({ display: state, count: cnt, types: typesData });
+                }
+            }
+        }
+
+        let opts = {
+            ...optionsBase,
+            colorAxis: { minValue: 0, maxValue: maxVal, colors: ['#bbf7d0', '#10b981', '#047857', '#064e3b'] },
+            enableRegionInteractivity: true,
+        };
+        if (codeIsoPays) {
+            opts.region = codeIsoPays;
+            opts.resolution = 'provinces';
+            opts.displayMode = 'regions';
+        } else {
+            opts.region = c;
+        }
+        const chartCountry = new google.visualization.GeoChart(mapEl);
+        chartCountry.draw(dataCountry, opts);
+        brancherClicCarte(chartCountry, dataCountry, rowsInfoCountry);
+    }
+}
+
+function dessinerCarteFTFDynamique(ftfList) {
+    const mapEl = document.getElementById('map_ftf_dynamic');
+    if (!ftfList || ftfList.length === 0 || !mapEl) return;
+
+    let ftfCountsByCountry = {};
+    ftfList.forEach(ftf => {
+        if (ftf.country && ftf.country !== 'Inconnu') {
+            ftfCountsByCountry[ftf.country] = (ftfCountsByCountry[ftf.country] || 0) + 1;
+        }
+    });
+
+    let topCountry = Object.keys(ftfCountsByCountry).sort((a, b) => ftfCountsByCountry[b] - ftfCountsByCountry[a])[0];
+    if (!topCountry) { mapEl.innerHTML = `<p style="text-align:center;padding:50px;color:var(--text-muted);">Carte des FTF indisponible.</p>`; return; }
+
+    const codeIsoPays = getIsoForZoom(topCountry);
+    let locs = {};
+    let hasData = false;
+    ftfList.forEach(ftf => {
+        if (ftf.country === topCountry && ftf.state && ftf.state !== 'Inconnue') {
+            locs[ftf.state] = (locs[ftf.state] || 0) + 1;
+            hasData = true;
+        }
+    });
+
+    if (!hasData) { mapEl.innerHTML = `<p style="text-align:center;padding:50px;color:var(--text-muted);">Aucune donnée de région disponible pour les FTF.</p>`; return; }
+
+    const isDark = document.body.classList.contains('dark-mode');
+    let dataCountry = new google.visualization.DataTable();
+    dataCountry.addColumn('string', 'Région');
+    dataCountry.addColumn('number', 'FTF');
+    let maxVal = Math.max(...Object.values(locs));
+    for (let state in locs) {
+        const googleState = getGoogleRegionName(topCountry, state);
+        dataCountry.addRow([{ v: googleState, f: state }, locs[state]]);
+    }
+    let opts = {
+        backgroundColor: { fill: isDark ? '#1e293b' : '#dbeafe' },
+        datalessRegionColor: isDark ? '#334155' : '#e2e8f0',
+        colorAxis: { minValue: 0, maxValue: maxVal, colors: ['#fef08a', '#f59e0b', '#b45309'] },
+        legend: 'none',
+        keepAspectRatio: true, // vue à plat "du dessus"
+        displayMode: 'regions',
+    };
+    if (codeIsoPays) { opts.region = codeIsoPays; opts.resolution = 'provinces'; }
+    else { opts.region = topCountry; }
+    appellerQuandGooglePret(() => {
+        new google.visualization.GeoChart(mapEl).draw(dataCountry, opts);
+    });
+}
 // =====================================================================
-// === MODULE GÉNÉRATEUR DE CHECKER PROJECT-GC =========================
+// === GÉNÉRATEUR DE SCRIPT LUA PROJECT-GC =============================
 // =====================================================================
 
-// =====================================================================
-// === MODULE GÉNÉRATEUR DE CHECKER PROJECT-GC (CORRIGÉ) ===============
-// =====================================================================
 function genererCodeLua() {
-    try {
-        const limit = parseInt(document.getElementById('chkLimit').value) || 1;
-        const keyword = document.getElementById('chkKeyword')?.value.trim();
-        
-        // 1. Récupération des Types dynamiques
-        const typeCheckboxes = document.querySelectorAll('.chk-type:checked');
-        const types = Array.from(typeCheckboxes).map(cb => `"${cb.value}"`);
-        if (types.length === 0) { alert("Sélectionnez au moins un type de cache !"); return; }
+    const limit = parseInt(document.getElementById('chkLimit').value) || 20;
+    const keyword = document.getElementById('chkKeyword').value.trim();
+    const country = document.getElementById('chkCountry').value.trim();
+    const region = document.getElementById('chkRegion').value.trim();
+    const minD = parseFloat(document.getElementById('chkMinD').value) || null;
+    const minT = parseFloat(document.getElementById('chkMinT').value) || null;
+    const hiddenFrom = document.getElementById('chkHiddenFrom').value;
+    const hiddenTo = document.getElementById('chkHiddenTo').value;
 
-        const sizeCheckboxes = document.querySelectorAll('.chk-size:checked');
-        const sizes = Array.from(sizeCheckboxes).map(cb => `"${cb.value}"`);
+    const selectedSizes = [...document.querySelectorAll('.chk-size:checked')].map(cb => `"${cb.value}"`);
+    const selectedTypes = [...document.querySelectorAll('.chk-type:checked')].map(cb => `"${cb.value}"`);
 
-        const country = document.getElementById('chkCountry')?.value.trim();
-        const region = document.getElementById('chkRegion')?.value.trim();
-        const minD = parseFloat(document.getElementById('chkMinD')?.value);
-        const minT = parseFloat(document.getElementById('chkMinT')?.value);
-        const hiddenFrom = document.getElementById('chkHiddenFrom')?.value;
-        const hiddenTo = document.getElementById('chkHiddenTo')?.value;
+    // Construction du filtre
+    let filterParts = [];
+    if (selectedTypes.length > 0 && selectedTypes.length < 12) {
+        filterParts.push(`    types = { ${selectedTypes.join(', ')} }`);
+    }
+    if (selectedSizes.length > 0 && selectedSizes.length < 7) {
+        filterParts.push(`    container = { ${selectedSizes.join(', ')} }`);
+    }
+    if (country) filterParts.push(`    country = "${country}"`);
+    if (region) filterParts.push(`    region = "${region}"`);
+    if (minD) filterParts.push(`    mindifficulty = ${minD}`);
+    if (minT) filterParts.push(`    minterrain = ${minT}`);
+    if (hiddenFrom) filterParts.push(`    placedFrom = "${hiddenFrom}"`);
+    if (hiddenTo) filterParts.push(`    placedTo = "${hiddenTo}"`);
 
-        // 2. Construction intelligente
-        let filtresArray = [];
-        filtresArray.push(`types = {${types.join(', ')}}`);
-        
-        if (sizes.length > 0 && sizes.length < document.querySelectorAll('.chk-size').length) {
-            filtresArray.push(`sizes = {${sizes.join(', ')}}`);
-        }
-        
-        if (country) filtresArray.push(`countries = {"${country}"}`);
-        if (region) filtresArray.push(`regions = {"${region}"}`);
-        if (!isNaN(minD)) filtresArray.push(`difficulty = {min = ${minD}}`);
-        if (!isNaN(minT)) filtresArray.push(`terrain = {min = ${minT}}`);
-        if (hiddenFrom) filtresArray.push(`hidden_fromdate = "${hiddenFrom}"`);
-        if (hiddenTo) filtresArray.push(`hidden_todate = "${hiddenTo}"`);
+    let filterBlock = filterParts.length > 0 
+        ? `{\n${filterParts.join(',\n')}\n  }` 
+        : '{}';
 
-        const filtresLua = filtresArray.join(',\n        ');
+    let keywordCheck = keyword 
+        ? `
+  -- Filtre sur le mot-clé dans le titre
+  local kw = string.lower("${keyword.replace(/"/g, '\\"')}")
+  if not string.find(string.lower(v.cache_name or ""), kw, 1, true) then
+    goto continue
+  end`
+        : '';
 
-        let keywordFilterBlock = "";
-        if (keyword) {
-            keywordFilterBlock = `
-    -- Filtrage additionnel par mot-clé
-    local target_keyword = string.lower(conf.keyword or "${keyword}")
-    local filtered_finds = {}
-    for _, cache in ipairs(finds) do
-        if string.find(string.lower(cache.cache_name), target_keyword, 1, true) then
-            table.insert(filtered_finds, cache)
-        end
-    end
-    finds = filtered_finds
+    let lua = `-- ============================================================
+-- Challenge Checker généré par Dashboard Geocaching Master Pro
+-- Critères : ${limit} caches requises
+-- ============================================================
+
+local args = {...}
+local conf = args[1].config
+local profileName = args[1]['profileName']
+
+local profileId = PGC.ProfileName2Id(profileName)
+PGC.print('Profil : ', profileName, ' (ID: ', profileId, ')\\n')
+
+local filter = ${filterBlock}
+
+local finds = PGC.GetFinds(profileId, {
+  fields = { 'gccode', 'cache_name', 'type', 'container', 'difficulty', 'terrain', 'country', 'region', 'visitdate' },
+  filter = filter
+})
+
+PGC.print(#finds, ' logs récupérés\\n')
+
+local validFinds = {}
+local seen = {}
+
+for _, v in ipairs(finds) do
+  -- Déduplication par code GC
+  if seen[v.gccode] then goto continue end
+  seen[v.gccode] = true
+${keywordCheck}
+  table.insert(validFinds, v)
+  ::continue::
+end
+
+local count = #validFinds
+local ok = count >= ${limit}
+
+local html = ""
+local log = false
+
+if ok then
+  html = "✅ Challenge réussi ! <b>" .. count .. " / ${limit}</b> caches valides trouvées.<br>"
+  log = "Challenge réussi : " .. count .. " / ${limit} caches."
+else
+  html = "⏳ Progression : <b>" .. count .. " / ${limit}</b> caches valides.<br>"
+end
+
+-- Détail par type de cache
+local typeCount = {}
+for _, v in ipairs(validFinds) do
+  local t = v.type or "Autre"
+  typeCount[t] = (typeCount[t] or 0) + 1
+end
+
+html = html .. "<br><b>Répartition par type :</b><br>"
+for t, n in pairs(typeCount) do
+  html = html .. "&nbsp;&nbsp;• " .. t .. " : " .. n .. "<br>"
+end
+
+return { ok = ok, log = log, html = html }
 `;
-        }
 
-        // 3. Assemblage SANS texte en dur (On injecte bien ${filtresLua})
-        const luaCode = `-- Checker Project-GC généré pour le Challenge "${keyword || 'Standard'}"
-
-function Validate(conf)
-    local goal = conf.goal or ${limit}
-    local profileId = conf.profileId
-    
-    -- Appel optimisé à l'API PGC
-    local filter = { 
-        ${filtresLua} 
-    }
-    
-    local finds = PGC.GetFinds(profileId, { filter = filter, fields = {'gccode', 'cache_name', 'visitdate'} })
-    ${keywordFilterBlock}
-    
-    local totalFound = #finds
-    local isOk = (totalFound >= goal)
-    
-    local txt_kw = "${keyword}" ~= "" and " ('" .. string.lower(conf.keyword or "${keyword}") .. "')" or ""
-    local textLog = "Vous avez trouvé " .. totalFound .. " caches" .. txt_kw .. " sur les " .. goal .. " requises."
-    local htmlLog = "<b>Challenge " .. (isOk and "réussi" or "en cours") .. " :</b> " .. totalFound .. " / " .. goal .. " trouvées.<br><br>"
-    
-    htmlLog = htmlLog .. "<table class='table table-bordered' style='width:100%; font-size:12px;'><tr><th>Code</th><th>Nom</th><th>Date</th></tr>"
-    for _, cache in ipairs(finds) do
-        htmlLog = htmlLog .. "<tr><td>" .. cache.gccode .. "</td><td>" .. cache.cache_name .. "</td><td>" .. cache.visitdate .. "</td></tr>"
-    end
-    htmlLog = htmlLog .. "</table>"
-    
-    return {
-        ok = isOk,
-        log = textLog,
-        html = htmlLog
-    }
-end`;
-
-        afficherResultat(luaCode);
-    } catch (e) {
-        alert("Erreur : " + e.message);
-    }
+    document.getElementById('luaOutput').value = lua;
 }
 
 function genererBadgeHtml() {
@@ -2214,50 +3245,27 @@ function genererBadgeHtml() {
     const checkerId = document.getElementById('chkID').value.trim();
 
     if (!gcCode || !checkerId) {
-        alert("⚠️ Vous devez indiquer le Code GC de votre cache et l'ID du Checker pour générer le badge.");
+        alert('Veuillez entrer le Code GC et l\'ID Checker.');
         return;
     }
 
-    const htmlCode = `<a href="https://project-gc.com/Challenges/${gcCode}/${checkerId}">
-    <img alt="PGC Checker" src="https://cdn2.project-gc.com/Images/Checker/${checkerId}" title="Project-GC Challenge checker">
-</a>`;
-
-    afficherResultat(htmlCode);
-}
-
-function afficherResultat(texte) {
-    const output = document.getElementById('luaOutput');
-    output.value = texte;
-    
-    // Animation de succès
-    output.style.borderColor = "#10b981";
-    output.style.boxShadow = "0 0 10px rgba(16, 185, 129, 0.5)";
-    setTimeout(() => { 
-        output.style.borderColor = "#475569"; 
-        output.style.boxShadow = "none";
-    }, 800);
+    const imgUrl = `https://project-gc.com/challenges/${gcCode}/${checkerId}`;
+    const html = `<a href="${imgUrl}" target="_blank"><img src="${imgUrl}.png" alt="Challenge Checker Badge" /></a>`;
+    document.getElementById('luaOutput').value = html;
 }
 
 function copierCodeLua() {
     const output = document.getElementById('luaOutput');
-    if (!output.value) return;
-    
+    if (!output.value) { alert('Rien à copier ! Générez d\'abord un script.'); return; }
     navigator.clipboard.writeText(output.value).then(() => {
-        const btn = event.target;
-        const txtOriginal = btn.innerText;
-        btn.innerText = "✅ Copié !";
-        btn.style.backgroundColor = "#059669";
-        
-        setTimeout(() => {
-            btn.innerText = txtOriginal;
-            btn.style.backgroundColor = "#10b981";
-        }, 2000);
+        let btn = event.currentTarget;
+        let origText = btn.innerHTML;
+        btn.innerHTML = '✅ Copié !';
+        btn.style.background = '#059669';
+        setTimeout(() => { btn.innerHTML = origText; btn.style.background = '#10b981'; }, 2000);
+    }).catch(() => {
+        output.select();
+        document.execCommand('copy');
+        alert('✅ Copié dans le presse-papiers !');
     });
-}
-
-
-// === FONCTION DE SÉCURITÉ HTML ===
-function escHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

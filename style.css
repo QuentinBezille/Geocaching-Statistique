@@ -90,15 +90,61 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .search-bar button { background: white; color: var(--primary-dark); border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-weight: 800; transition: 0.2s;}
 .search-bar button:hover { transform: scale(1.05); }
 
-/* KPIS SUR UNE SEULE LIGNE */
-.kpi-grid { grid-column: span 12; display: grid; grid-template-columns: repeat(9, 1fr); gap: 10px; }
-@media (max-width: 1200px) { .kpi-grid { display: flex; overflow-x: auto; padding-bottom: 10px; } .kpi-card { min-width: 130px; flex: 1; } }
-.kpi-card { background: var(--card); padding: 12px 5px; border-radius: 12px; box-shadow: var(--shadow-sm); border-bottom: 4px solid var(--primary); display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; transition: transform 0.2s;}
-.kpi-card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md);}
-.kpi-card .icon { font-size: 20px; background: var(--primary-light); width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 10px; margin: 0 auto;}
-.kpi-card h4 { margin: 0; color: var(--text-muted); font-size: 9px; text-transform: uppercase; font-weight: 800; line-height: 1.2; height: 22px; display: flex; align-items: center; justify-content: center;}
-.kpi-card .value { font-size: 20px; font-weight: 900; color: var(--text-main); line-height: 1;}
-.kpi-card .sub-text { font-size: 9px; color: #94a3b8; margin-top: 0; font-weight: 600; line-height: 1.3;}
+/* =========================================
+   KPI CARDS — Design Premium (Mode Sombre par défaut)
+   ========================================= */
+.kpi-grid {
+    grid-column: span 12;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 15px;
+    align-items: stretch;
+    margin-bottom: 20px;
+}
+.kpi-card {
+    background: #1e293b !important; /* Fond sombre premium constant */
+    border: 1px solid #334155 !important;
+    padding: 16px 12px;
+    border-radius: 14px;
+    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    align-items: center;
+    text-align: center;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.kpi-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+.kpi-card h4 {
+    margin: 0 0 10px 0;
+    color: #cbd5e1 !important;
+    font-size: 11px !important;
+    text-transform: uppercase;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    line-height: 1.3;
+    min-height: 28px;
+    display: flex;
+    align-items: center;
+}
+.kpi-card .value { 
+    font-size: 26px !important; 
+    font-weight: 900 !important; 
+    color: #ffffff !important; 
+    margin-bottom: 10px;
+}
+.kpi-card .sub-text { 
+    font-size: 11px !important; 
+    color: #94a3b8 !important; 
+    font-weight: 600 !important; 
+    line-height: 1.4;
+}
+/* Sur très petit écran : on repasse en carrousel horizontal pour ne jamais écraser le texte */
+@media (max-width: 640px) {
+    .kpi-grid { display: flex; overflow-x: auto; padding-bottom: 10px; }
+    .kpi-card { min-width: 130px; flex: 0 0 auto; }
+}
+
 
 /* CARTES COMMUNES */
 .card { background: var(--card); padding: 25px; border-radius: 16px; box-shadow: var(--shadow-sm); overflow: hidden; border: 1px solid #f1f5f9;}
@@ -326,15 +372,7 @@ body.dark-mode input[type="range"] {
     background-color: transparent !important;
 }
 
-/* 2. Agrandir les textes des KPI (Physiques, Labs, Jours consécutifs...) */
-.kpi-card .sub-text {
-    font-size: 13px !important; /* On grossit de 9px à 13px ! */
-    line-height: 1.4 !important;
-    font-weight: 700 !important;
-}
-body.dark-mode .kpi-card .sub-text {
-    color: #cbd5e1 !important; /* Gris clair hyper lisible en sombre */
-}
+/* (Agrandissement texte KPI déjà géré dans le bloc .kpi-card unique en haut du fichier) */
 
 /* 3. Agrandir le Top 50 */
 .day-card .date { font-size: 14px !important; font-weight: 800 !important; }
@@ -356,31 +394,7 @@ body.dark-mode .grid-366 .invalid {
 body.dark-mode .dt-matrix th { font-size: 15px !important; color: #cbd5e1 !important; }
 body.dark-mode .dt-cell { font-size: 14px !important; }
 
-/* ====================================================
-   CORRECTION ALIGNEMENT DES KPI & TOP 50
-   ==================================================== */
-
-/* 1. Rendre les cartes KPI jolies et centrées */
-.kpi-grid {
-    align-items: stretch; 
-}
-.kpi-card {
-    display: flex;
-    flex-direction: column;
-    justify-content: center; /* Centre parfaitement le texte au milieu */
-    align-items: center;
-    height: auto;
-    min-height: 120px; /* Donne une bonne hauteur de base */
-    padding: 15px 5px;
-}
-.kpi-card h4 {
-    min-height: auto !important; /* Annule l'ancien réglage moche */
-    margin-bottom: 8px;
-}
-.kpi-card .sub-text {
-    margin-top: 8px !important; /* Espace équilibré */
-    padding-top: 0 !important;
-}
+/* (Anciens patchs KPI dupliqués supprimés — un seul bloc .kpi-card propre existe désormais en haut du fichier) */
 
 /* 2. Empêcher les badges #1, #2 du Top 50 de déborder à gauche */
 .days-grid {
@@ -438,12 +452,7 @@ body.dark-mode .grid-366 { background-color: transparent !important; }
 body.dark-mode .grid-366 td { border: 1px solid #475569 !important; }
 body.dark-mode .grid-366 .invalid { background-color: #0f172a !important; }
 
-/* Flexbox pour des cartes KPI symétriques et centrées */
-.kpi-grid { align-items: stretch; }
-.kpi-card { display: flex; flex-direction: column; justify-content: flex-start; align-items: center; height: 100%; box-sizing: border-box; padding: 15px 5px 12px 5px; }
-.kpi-card h4 { min-height: 26px !important; margin-bottom: 10px; display: flex; align-items: center; text-align: center; }
-.kpi-card .sub-text { margin-top: auto !important; padding-top: 8px !important; font-size: 13px !important; font-weight: 700 !important; }
-body.dark-mode .kpi-card .sub-text { color: #cbd5e1 !important; }
+/* (Bloc KPI dupliqué supprimé — voir le bloc .kpi-card unique en haut du fichier) */
 
 /* Top 50 qui respire */
 .days-grid { padding: 15px 15px 15px 25px !important; }
@@ -490,4 +499,440 @@ body.dark-mode #exclusContent span[style*="background:#fee2e2"] {
     background-color: #7f1d1d !important;
     color: #fecaca !important;
     border: 1px solid #991b1b !important;
+}
+/* =====================================================================
+ * REDESIGN ERGONOMIQUE — AMÉLIORATIONS GLOBALES
+ * ===================================================================== */
+
+/* ---- HEADER amélioré ---- */
+.header-top {
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.header-top > div:last-child {
+    flex-wrap: wrap;
+    gap: 10px !important;
+    display: flex !important;
+    align-items: center !important;
+}
+
+/* ---- PANEL DE CONTRÔLE restructuré ---- */
+.control-panel {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 16px;
+    margin-bottom: 25px;
+    align-items: stretch;
+}
+.settings-box {
+    flex: 0 0 260px;
+    min-width: 220px;
+}
+.upload-section-wrapper {
+    flex: 1;
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    align-items: stretch;
+}
+.upload-box {
+    flex: 1;
+    min-width: 200px;
+    padding: 18px 20px;
+    border-radius: 14px;
+}
+.upload-box h3 {
+    font-size: 11px;
+    letter-spacing: 1.5px;
+    margin-bottom: 12px;
+}
+
+/* ---- BOUTONS upload resserrés ---- */
+.upload-btn {
+    padding: 14px 10px;
+    font-size: 13px;
+    border-radius: 10px;
+}
+.btn-clear-small {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: 0.2s;
+    min-width: 36px;
+}
+.btn-clear-small:hover { background: #fee2e2; border-color: #ef4444; }
+
+/* ---- ONGLETS modernisés ---- */
+.tabs {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+.tab-btn {
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    padding: 7px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 700;
+    color: #64748b;
+    font-size: 13px;
+    transition: all 0.15s;
+    white-space: nowrap;
+}
+.tab-btn.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary-dark);
+    box-shadow: 0 2px 6px rgba(5,150,105,0.35);
+}
+.tab-btn:hover:not(.active) { background: #e2e8f0; color: var(--text-main); }
+
+/* (Ancien forçage "9 colonnes égales !important" supprimé : il écrasait les libellés des KPI
+   sur les petits écrans — le bloc .kpi-grid/.kpi-card unique en haut du fichier gère désormais
+   tout ça avec un grid responsive auto-fit, sans jamais tronquer le texte.) */
+
+/* ---- CARTES : header cliquable avec chevron ---- */
+.card-header {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s;
+    border-radius: 10px;
+    padding: 10px 14px !important;
+    margin-left: -14px;
+    margin-right: -14px;
+    margin-top: -10px;
+}
+.card-header:hover { background: rgba(0,0,0,0.03); }
+.card-header::after {
+    content: '▾';
+    font-size: 16px;
+    color: var(--text-muted);
+    margin-left: 10px;
+    transition: transform 0.25s;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.card.collapsed .card-header::after { transform: rotate(-90deg); }
+
+/* ---- CARTES GEO : conteneurs avec bonne hauteur ---- */
+#map_world, #map_europe, #map_ftf_dynamic {
+    width: 100%;
+    height: 380px !important;
+    border-radius: 12px;
+    border: 1px solid var(--border, #e2e8f0);
+    overflow: hidden;
+    background: #dbeafe;
+}
+[id^="map_"]:not(#map_world):not(#map_europe):not(#map_ftf_dynamic):not(#mapContainer):not(#tab360-carte) {
+    width: 100%;
+    max-width: 100% !important;
+    height: 480px !important;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #dbeafe;
+}
+
+/* Grille deux colonnes monde */
+.geo-world-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+@media (max-width: 800px) { .geo-world-grid { grid-template-columns: 1fr; } }
+
+/* ---- LÉGENDE COULEUR pour les cartes ---- */
+.map-legend {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+.map-legend-bar {
+    height: 10px;
+    width: 120px;
+    border-radius: 6px;
+    background: linear-gradient(90deg, #bbf7d0, #059669, #064e3b);
+}
+.map-legend-bar-ftf {
+    background: linear-gradient(90deg, #fef08a, #f59e0b, #b45309) !important;
+}
+/* Empêche la classe ftf d'être appliquée au conteneur map-legend */
+.map-legend.map-legend-ftf {
+    background: none !important;
+}
+
+/* ---- SUMMARY CARD des pays ---- */
+.geo-summary-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: center;
+    margin-top: 12px;
+    max-height: 100px;
+    overflow-y: auto;
+    padding: 4px;
+}
+.geo-chip {
+    background: var(--primary-light, #d1fae5);
+    color: var(--primary-dark, #047857);
+    border: 1px solid #a7f3d0;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+/* ---- ONGLET CARTE GEO avec indicateur ---- */
+.tab-btn[data-count]::after {
+    content: attr(data-count);
+    background: var(--primary-light, #d1fae5);
+    color: var(--primary-dark, #047857);
+    border-radius: 10px;
+    padding: 1px 6px;
+    font-size: 10px;
+    margin-left: 5px;
+    font-weight: 900;
+}
+.tab-btn.active[data-count]::after {
+    background: rgba(255,255,255,0.25);
+    color: white;
+}
+
+/* ---- DARK MODE cartes geo ---- */
+body.dark-mode #map_world,
+body.dark-mode #map_europe,
+body.dark-mode #map_ftf_dynamic,
+body.dark-mode [id^="map_"] {
+    background: #1e293b !important;
+    border-color: #334155 !important;
+}
+body.dark-mode .geo-chip {
+    background: #064e3b;
+    color: #6ee7b7;
+    border-color: #047857;
+}
+body.dark-mode .map-legend { color: #94a3b8; }
+
+/* ---- SCROLLBAR fine partout ---- */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+/* ---- TEXTES DARK MODE ---- */
+body.dark-mode .geo-world-grid h4 { color: var(--secondary, #34d399); }
+
+/* ---- CARD HEADER dans le dark mode ---- */
+body.dark-mode .card-header:hover { background: rgba(255,255,255,0.04); }
+
+/* =========================================
+   CENTREUR DE CARTES & BOUTONS AIDE (❓)
+   ========================================= */
+
+/* Classe pour centrer parfaitement les cartes Google (comme la carte FTF) */
+.map-centered-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+/* Boutons d'aide Premium */
+.btn-aide {
+    background: #334155 !important;
+    color: #cbd5e1 !important;
+    border: 1px solid #475569 !important;
+    border-radius: 20px !important;
+    padding: 4px 12px !important;
+    font-weight: bold !important;
+    cursor: pointer;
+    font-size: 12px !important;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.btn-aide:hover { background: #475569 !important; color: #ffffff !important; }
+
+/* Contenu des boîtes d'aide */
+.aide-box {
+    background: #f8fafc;
+    border-left: 4px solid #3b82f6;
+    padding: 12px 16px;
+    margin: 10px 0 15px;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #334155;
+    box-shadow: var(--shadow-sm);
+}
+.aide-box strong { color: #1e40af; font-size: 14px; display: block; margin-bottom: 6px; }
+.aide-box ol, .aide-box ul { margin: 0; padding-left: 20px; line-height: 1.6; }
+.aide-box li { margin-bottom: 4px; }
+.aide-box code, .aide-box b { color: #1e40af; }
+
+/* Mode Sombre pour l'aide */
+body.dark-mode .btn-aide { background: #1e293b !important; border-color: #334155 !important; }
+body.dark-mode .aide-box { background: #1e293b !important; border-color: #3b82f6 !important; color: #cbd5e1 !important; }
+body.dark-mode .aide-box strong, body.dark-mode .aide-box code, body.dark-mode .aide-box b { color: #93c5fd !important; }
+
+/* =========================================
+   NAVIGATION PRINCIPALE PAR ONGLETS (façon navigateur)
+   Remplace le défilement infini par 7 panneaux dédiés, un seul visible à la fois.
+   ========================================= */
+.main-tabs-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    background: #e2e8f0;
+    padding: 8px 8px 0;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 2px solid var(--primary);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    margin-top: 16px;
+}
+.main-tab-btn {
+    background: #cbd5e1;
+    color: #475569;
+    border: 1px solid #94a3b8;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 16px;
+    font-weight: 700;
+    font-size: 13px;
+    cursor: pointer;
+    transition: 0.15s;
+    white-space: nowrap;
+}
+.main-tab-btn:hover { background: #e2e8f0; color: var(--text-main); }
+.main-tab-btn.active {
+    background: var(--card);
+    color: var(--primary-dark);
+    border-color: var(--primary);
+    box-shadow: 0 -2px 6px rgba(5,150,105,0.15);
+    position: relative;
+    top: 1px;
+}
+
+.main-tab-panel {
+    grid-column: span 12; /* CRITIQUE : sans ça, le panel n'occupe qu'1/12 de la largeur du grid parent .dashboard */
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    padding-top: 20px;
+    animation: fadeInTab 0.25s ease;
+}
+@keyframes fadeInTab {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+body.dark-mode .main-tabs-bar { background: #1e293b; border-bottom-color: var(--primary); }
+body.dark-mode .main-tab-btn { background: #0f172a; color: #94a3b8; border-color: #334155; }
+body.dark-mode .main-tab-btn:hover { background: #1e293b; color: #e2e8f0; }
+body.dark-mode .main-tab-btn.active { background: var(--card); color: #6ee7b7; border-color: #10b981; }
+
+/* Sur mobile, les onglets passent en grille scrollable horizontale pour rester lisibles */
+@media (max-width: 768px) {
+    .main-tabs-bar {
+        overflow-x: auto;
+        flex-wrap: nowrap;
+        -webkit-overflow-scrolling: touch;
+    }
+    .main-tab-btn { font-size: 12px; padding: 9px 12px; }
+}
+
+/* =========================================
+   RÉSUMÉ PAR PAYS (Challenge 360°) — mini cercles de secteurs azimutaux
+   ========================================= */
+.pays-resume-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 18px;
+}
+.pays-resume-card {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: var(--bg);
+    border: 1px solid var(--border, #e2e8f0);
+    border-radius: 12px;
+    padding: 12px 16px;
+    min-width: 220px;
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+.pays-resume-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
+.pays-resume-label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
+.pays-resume-label strong { font-size: 14px; color: var(--text-main); }
+.pays-resume-label span:nth-child(2) { color: #10b981; font-weight: 700; }
+
+/* =========================================================
+   NAVIGATION PRINCIPALE PAR ONGLETS (façon onglets navigateur)
+   Remplace l'ancienne longue page à scroller par 7 panneaux,
+   un seul visible à la fois.
+   ========================================================= */
+.main-tabs-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    background: #e2e8f0;
+    border-radius: 12px 12px 0 0;
+    padding: 8px 8px 0;
+    margin: 18px 0 0;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+.main-tab-btn {
+    appearance: none;
+    border: 1px solid #cbd5e1;
+    border-bottom: none;
+    background: #f1f5f9;
+    color: #475569;
+    font-weight: 700;
+    font-size: 13.5px;
+    padding: 10px 18px;
+    border-radius: 10px 10px 0 0;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s, color 0.15s, transform 0.1s;
+    position: relative;
+    top: 1px;
+}
+.main-tab-btn:hover { background: #e2e8f0; color: var(--text-main); }
+.main-tab-btn.active {
+    background: var(--card);
+    color: var(--primary-dark);
+    border-color: var(--border, #cbd5e1);
+    border-bottom: 3px solid var(--primary);
+    box-shadow: 0 -3px 8px rgba(0,0,0,0.04);
+    z-index: 2;
+}
+
+/* Le panneau actif se rattache visuellement à l'onglet actif (effet "carte de classeur") */
+.main-tab-panel {
+    background: transparent;
+    border-radius: 0 0 14px 14px;
+    padding-top: 14px;
+}
+
+body.dark-mode .main-tabs-bar { background: #0f172a; }
+body.dark-mode .main-tab-btn { background: #1e293b; color: #94a3b8; border-color: #334155; }
+body.dark-mode .main-tab-btn:hover { background: #273549; color: #e2e8f0; }
+body.dark-mode .main-tab-btn.active { background: var(--card); color: #fbbf24; border-bottom-color: #fbbf24; }
+
+/* Mobile : onglets compacts, toujours sur une seule ligne défilable horizontalement */
+@media (max-width: 720px) {
+    .main-tabs-bar { gap: 0; padding: 6px 6px 0; }
+    .main-tab-btn { padding: 9px 13px; font-size: 12.5px; border-radius: 8px 8px 0 0; }
 }
