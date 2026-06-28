@@ -91,54 +91,54 @@ body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); co
 .search-bar button:hover { transform: scale(1.05); }
 
 /* =========================================
-   KPI CARDS — Design Premium (Mode Sombre par défaut)
+   KPI CARDS — bloc unique et propre (remplace tous les anciens patchs dupliqués)
    ========================================= */
 .kpi-grid {
     grid-column: span 12;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 14px;
     align-items: stretch;
-    margin-bottom: 20px;
 }
 .kpi-card {
-    background: #1e293b !important; /* Fond sombre premium constant */
-    border: 1px solid #334155 !important;
-    padding: 16px 12px;
+    background: var(--card);
+    padding: 16px 10px;
     border-radius: 14px;
-    box-shadow: 0 4px 6px -1px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 8px rgba(15,23,42,0.07);
+    border: 1px solid rgba(16,185,129,0.18);
+    border-bottom: 4px solid var(--primary);
     display: flex;
     flex-direction: column;
-    justify-content: space-between;
+    justify-content: center;
     align-items: center;
     text-align: center;
+    gap: 8px;
+    min-height: 115px;
+    box-sizing: border-box;
     transition: transform 0.2s, box-shadow 0.2s;
 }
-.kpi-card:hover { transform: translateY(-4px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
+.kpi-card:hover { transform: translateY(-4px); box-shadow: 0 8px 18px rgba(15,23,42,0.14); }
+body.dark-mode .kpi-card { box-shadow: 0 2px 8px rgba(0,0,0,0.3); border-color: rgba(16,185,129,0.25); }
+body.dark-mode .kpi-card:hover { box-shadow: 0 8px 18px rgba(0,0,0,0.45); }
+.kpi-card .icon { font-size: 20px; background: var(--primary-light); width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; border-radius: 10px; margin: 0 auto; }
 .kpi-card h4 {
-    margin: 0 0 10px 0;
-    color: #cbd5e1 !important;
-    font-size: 11px !important;
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 11px;
     text-transform: uppercase;
     font-weight: 800;
-    letter-spacing: 0.5px;
     line-height: 1.3;
     min-height: 28px;
     display: flex;
     align-items: center;
+    justify-content: center;
+    text-align: center;
 }
-.kpi-card .value { 
-    font-size: 26px !important; 
-    font-weight: 900 !important; 
-    color: #ffffff !important; 
-    margin-bottom: 10px;
-}
-.kpi-card .sub-text { 
-    font-size: 11px !important; 
-    color: #94a3b8 !important; 
-    font-weight: 600 !important; 
-    line-height: 1.4;
-}
+.kpi-card .value { font-size: 24px; font-weight: 900; color: var(--primary-dark); line-height: 1; }
+body.dark-mode .kpi-card .value { color: #6ee7b7; }
+.kpi-card .sub-text { font-size: 11px; color: #94a3b8; margin-top: auto; padding-top: 6px; font-weight: 700; line-height: 1.35; }
+body.dark-mode .kpi-card .sub-text { color: #cbd5e1; }
+
 /* Sur très petit écran : on repasse en carrousel horizontal pour ne jamais écraser le texte */
 @media (max-width: 640px) {
     .kpi-grid { display: flex; overflow-x: auto; padding-bottom: 10px; }
@@ -735,55 +735,40 @@ body.dark-mode .geo-world-grid h4 { color: var(--secondary, #34d399); }
 body.dark-mode .card-header:hover { background: rgba(255,255,255,0.04); }
 
 /* =========================================
-   CENTREUR DE CARTES & BOUTONS AIDE (❓)
+   BOUTONS D'AIDE (❓) — STYLE UNIFIÉ PARTOUT
    ========================================= */
-
-/* Classe pour centrer parfaitement les cartes Google (comme la carte FTF) */
-.map-centered-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-}
-
-/* Boutons d'aide Premium */
 .btn-aide {
-    background: #334155 !important;
-    color: #cbd5e1 !important;
-    border: 1px solid #475569 !important;
-    border-radius: 20px !important;
-    padding: 4px 12px !important;
-    font-weight: bold !important;
+    background: #fef3c7;
+    color: #d97706;
+    border: 1px solid #f59e0b;
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-weight: bold;
     cursor: pointer;
-    font-size: 12px !important;
-    transition: all 0.2s ease;
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
+    font-size: 12px;
+    transition: 0.2s;
+    white-space: nowrap;
 }
-.btn-aide:hover { background: #475569 !important; color: #ffffff !important; }
+.btn-aide:hover { background: #fde68a; }
 
-/* Contenu des boîtes d'aide */
 .aide-box {
-    background: #f8fafc;
-    border-left: 4px solid #3b82f6;
+    background: #fffbeb;
+    border-left: 4px solid #f59e0b;
     padding: 12px 16px;
     margin: 10px 0 15px;
-    border-radius: 6px;
+    border-radius: 4px;
     font-size: 13px;
-    color: #334155;
-    box-shadow: var(--shadow-sm);
+    color: #92400e;
 }
-.aide-box strong { color: #1e40af; font-size: 14px; display: block; margin-bottom: 6px; }
+.aide-box strong { color: #b45309; font-size: 14px; display: block; margin-bottom: 6px; }
 .aide-box ol, .aide-box ul { margin: 0; padding-left: 20px; line-height: 1.6; }
 .aide-box li { margin-bottom: 4px; }
-.aide-box code, .aide-box b { color: #1e40af; }
+.aide-box code, .aide-box b { color: #92400e; }
 
-/* Mode Sombre pour l'aide */
-body.dark-mode .btn-aide { background: #1e293b !important; border-color: #334155 !important; }
-body.dark-mode .aide-box { background: #1e293b !important; border-color: #3b82f6 !important; color: #cbd5e1 !important; }
-body.dark-mode .aide-box strong, body.dark-mode .aide-box code, body.dark-mode .aide-box b { color: #93c5fd !important; }
+body.dark-mode .btn-aide { background: #422006; color: #fbbf24; border-color: #92400e; }
+body.dark-mode .btn-aide:hover { background: #57290a; }
+body.dark-mode .aide-box { background: #1c1409 !important; border-color: #92400e !important; color: #fcd34d !important; }
+body.dark-mode .aide-box strong { color: #fbbf24 !important; }
 
 /* =========================================
    NAVIGATION PRINCIPALE PAR ONGLETS (façon navigateur)
@@ -853,30 +838,6 @@ body.dark-mode .main-tab-btn.active { background: var(--card); color: #6ee7b7; b
     .main-tab-btn { font-size: 12px; padding: 9px 12px; }
 }
 
-/* =========================================
-   RÉSUMÉ PAR PAYS (Challenge 360°) — mini cercles de secteurs azimutaux
-   ========================================= */
-.pays-resume-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 18px;
-}
-.pays-resume-card {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    background: var(--bg);
-    border: 1px solid var(--border, #e2e8f0);
-    border-radius: 12px;
-    padding: 12px 16px;
-    min-width: 220px;
-    transition: transform 0.15s, box-shadow 0.15s;
-}
-.pays-resume-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-sm); }
-.pays-resume-label { display: flex; flex-direction: column; gap: 2px; font-size: 12px; }
-.pays-resume-label strong { font-size: 14px; color: var(--text-main); }
-.pays-resume-label span:nth-child(2) { color: #10b981; font-weight: 700; }
-
 /* =========================================================
    NAVIGATION PRINCIPALE PAR ONGLETS (façon onglets navigateur)
    Remplace l'ancienne longue page à scroller par 7 panneaux,
@@ -935,4 +896,20 @@ body.dark-mode .main-tab-btn.active { background: var(--card); color: #fbbf24; b
 @media (max-width: 720px) {
     .main-tabs-bar { gap: 0; padding: 6px 6px 0; }
     .main-tab-btn { padding: 9px 13px; font-size: 12.5px; border-radius: 8px 8px 0 0; }
+}
+
+/* Centrer les cartes Google GeoChart */
+#curve_chart, #belgium_chart, #world_chart {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 20px auto;
+    max-width: 900px;
+    width: 100%;
+}
+
+.geo-chart-container {
+    display: flex;
+    justify-content: center;
+    padding: 20px 0;
 }

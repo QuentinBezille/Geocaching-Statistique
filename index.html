@@ -5,11 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Geocaching Master Pro</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://www.gstatic.com/charts/loader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js"></script>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style-maps.css"> <!-- NOUVEAU -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 </head>
 <body>
 
@@ -104,7 +108,7 @@
     <button class="main-tab-btn active" onclick="switchMainTab('overview')">📊 Vue d'ensemble</button>
     <button class="main-tab-btn" onclick="switchMainTab('calendar')">🗓️ Calendrier</button>
     <button class="main-tab-btn" onclick="switchMainTab('matrix')">🎯 Matrice &amp; Habitudes</button>
-    <button class="main-tab-btn" onclick="switchMainTab('maps')">🗺️ Cartes</button>
+    
     <button class="main-tab-btn" onclick="switchMainTab('ftf')">🏆 FTF &amp; Paliers</button>
     <button class="main-tab-btn" onclick="switchMainTab('challenge360')">🧭 Challenge 360</button>
     <button class="main-tab-btn" onclick="switchMainTab('tools')">🛠️ Outils</button>
@@ -315,15 +319,6 @@
                     </table>
                 </div>
 
-                <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">🗺️ Carte des FTF par région</h4>
-                <div style="margin-bottom: 20px;">
-                    <div id="map_ftf_dynamic" style="width: 100%; height: 420px; border-radius: 12px; border: 1px solid var(--border); overflow:hidden; background:#dbeafe;"></div>
-                    <div class="map-legend map-legend-ftf" style="margin-top:10px;">
-                        <span>Peu</span>
-                        <div class="map-legend-bar map-legend-bar-ftf"></div>
-                        <span>Beaucoup</span>
-                    </div>
-                </div>
 
                 <h4 style="color: var(--primary); margin-bottom: 10px; border-bottom: 2px solid var(--border); padding-bottom: 5px;">📅 FTFs par date de trouvaille</h4>
                 <div id="ftfGrid366Text" style="margin-bottom: 10px; font-size: 13px; font-weight: 600; color: var(--text-muted); text-align: center;"></div>
@@ -568,27 +563,6 @@
         </div>
         </div><!-- /panel-matrix -->
 
-        <div class="main-tab-panel" id="panel-maps" style="display:none;">
-        <div class="card card-full" id="geoMapsCard" style="display:none;">
-            <div class="card-header">
-                <h3>🗺️ Cartes des découvertes par région</h3>
-                <div style="display:flex; align-items:center; gap:10px; margin-left:auto;" onclick="event.stopPropagation()">
-                    <div class="tabs" id="dynamicMapTabs"></div>
-                    <button onclick="toggleAide('aideGeoMaps')" class="btn-aide">❓ Aide</button>
-                </div>
-            </div>
-            <div id="aideGeoMaps" class="aide-box" style="display:none;">
-                <strong>🛠️ Comment ça marche ?</strong>
-                <ol>
-                    <li>Cette carte se construit automatiquement à partir du fichier <b>Caches (.gpx)</b> chargé dans la section "1. Données principales" en haut de page.</li>
-                    <li>Pour générer ce GPX : sur Geocaching.com, va dans <i>Mon Profil → Mes Caches Trouvées</i>, puis utilise l'export "My Finds Pocket Query" (ou Project-GC : Tools → My Finds export GPX).</li>
-                    <li>Clique sur un onglet pays pour voir le détail de ce pays, puis clique directement sur une région colorée pour ouvrir le détail des types de caches trouvées dans cette région.</li>
-                    <li>Si une région reste grise alors que tu y as des trouvailles, c'est probablement que le nom de la région dans ton GPX ne correspond à aucun nom connu : vérifie l'orthographe ou signale-le.</li>
-                </ol>
-            </div>
-            <div id="dynamicMapContainers"></div>
-        </div>
-        </div><!-- /panel-maps -->
 
         <div class="main-tab-panel" id="panel-tools" style="display:none;">
         <div class="card card-full" id="module-generateur">
@@ -720,5 +694,20 @@
 </div>
 
 <script src="script.js"></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"8607d2a720d14b038279025b2b5a82e5","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
+<!-- Le loader Google (que tu avais déjà, garde-le) -->
+<script src="https://www.gstatic.com/charts/loader.js"></script>
+
+<!-- 1. Le mapping EN PREMIER -->
+<script src="regionMapping.js"></script>
+
+<!-- 2. La version que tu testes (commence par Google) -->
+<script src="map-google.js"></script>
+<!-- <script src="map-leaflet.js"></script>  ← à activer plus tard -->
+
+<!-- 3. Ton script principal EN DERNIER -->
+<script src="script.js"></script>
+
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js/v833ccba57c9e4d2798f2e76cebdd09a11778172276447" integrity="sha512-57MDmcccJXYtNnH+ZiBwzC4jb2rvgVCEokYN+L/nLlmO8rfYT/gIpW2A569iJ/3b+0UEasghjuZH/ma3wIs/EQ==" data-cf-beacon='{"version":"2024.11.0","token":"8607d2a720d14b038279025b2b5a82e5","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>

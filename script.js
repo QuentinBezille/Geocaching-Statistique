@@ -26,8 +26,9 @@ let chartRadarDays = null, chartRadarMonths = null, chart360 = null, leafletMap 
 
 window.onload = function() {
     // --- Restauration de l'onglet principal actif (navigation par onglets) ---
+    let lastTab = null;
     try {
-        const lastTab = localStorage.getItem('mainTab_actif');
+        lastTab = localStorage.getItem('mainTab_actif');
         if (lastTab && MAIN_TABS.includes(lastTab)) {
             MAIN_TABS.forEach(id => {
                 const panel = document.getElementById('panel-' + id);
@@ -104,6 +105,11 @@ window.onload = function() {
             header.parentElement.classList.toggle('collapsed');
         });
     });
+
+    // Recalibre les widgets si l'onglet restauré au chargement est calendar/maps/360
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => rafraichirWidgetsOnglet(lastTab || 'overview'));
+    });
 };
 // === SAUVEGARDE AUTO DU PSEUDO ET DOMICILE ===
 document.getElementById('username').addEventListener('input', (e) => {
@@ -140,7 +146,10 @@ function viderMemoire() {
         }
     }
 
-    // 5. Recharger la page pour remettre le Dashboard à zéro proprement
+    // 5. Ouvrir l'onglet "Vue d'ensemble" au prochain chargement (page d'accueil logique une fois vidé)
+    try { localStorage.setItem('mainTab_actif', 'overview'); } catch (e) {}
+
+    // 6. Recharger la page pour remettre le Dashboard à zéro proprement
     location.reload();
 }
 
@@ -148,7 +157,10 @@ document.getElementById('gpxInput').addEventListener('change', e => {
     if (!e.target.files[0]) return;
     document.getElementById('gpxBtn').innerHTML = "⏳ Analyse en cours...";
     const reader = new FileReader();
-    reader.onload = ev => traiterGPX(ev.target.result);
+    reader.onload = ev => {
+        traiterGPX(ev.target.result);
+        switchMainTab('overview'); // Retour à la vue d'ensemble après un (re)chargement de données
+    };
     reader.readAsText(e.target.files[0]);
     e.target.value = null; // Permet de recharger le même fichier
 });
@@ -335,10 +347,18 @@ function traiterGPX(xmlString, isDraft = false) {
             const dtKey = `${parseFloat(diffRaw)}/${parseFloat(terrRaw)}`;
             const cacheName = cache.getElementsByTagNameNS("*", "name")[0]?.textContent || "Cache Inconnue";
             const country = cache.getElementsByTagNameNS("*", "country")[0]?.textContent || "Inconnu";
-            const state = cache.getElementsByTagNameNS("*", "state")[0]?.textContent || "Inconnue";
+            let state = cache.getElementsByTagNameNS("*", "state")[0]?.textContent || "Inconnue";
             const gcCode = wpt.getElementsByTagNameNS("*", "name")[0]?.textContent || "";
             const lat = parseFloat(wpt.getAttribute("lat"));
             const lon = parseFloat(wpt.getAttribute("lon"));
+
+            // FALLBACK GÉOGRAPHIQUE : Geocaching.com laisse souvent le champ "state/province" vide
+            // dans le GPX. Quand c'est le cas (France/Belgique uniquement pour l'instant), on devine
+            // la région à partir des coordonnées GPS plutôt que de perdre la cache en "Inconnue".
+            if (state === "Inconnue" && !isNaN(lat) && !isNaN(lon)) {
+                let deduite = devinerRegionParCoords(country, lat, lon);
+                if (deduite) state = deduite;
+            }
             
             let countLogTrouve = 0;
 
@@ -821,7 +841,9 @@ function compilerEtAfficher() {
     window.lastFtfList = fs.ftfList;
     appellerQuandGooglePret(() => {
         initCartesDynamiques(fs.locations);
-        dessinerCarteFTFDynamique(fs.ftfList);
+        if (isMainPanelVisible('maps')) {
+            dessinerCarteFTFDynamique(fs.ftfList);
+        }
     });
 
     // NOUVEAU : Force la mise à jour des couleurs des graphiques fraîchement créés
@@ -1114,11 +1136,12 @@ function genererTop50(daysData) {
 function genererAgenda(daysData) {
     const calendarEl = document.getElementById('calendar');
     if(!calendarEl) return;
-    calendarEl.innerHTML = ''; 
+    calendarEl.innerHTML = '';
     const events = Object.keys(daysData).map(date => ({ start: date, allDay: true, extendedProps: { physiques: daysData[date].physiques, labs: daysData[date].labs, dateBrute: date } }));
 
     fullCalendarInstance = new FullCalendar.Calendar(calendarEl, {
-        initialView: 'dayGridMonth', locale: 'fr', firstDay: 1, height: '100%',
+        initialView: 'dayGridMonth', locale: 'fr', firstDay: 1,
+        height: 650, // hauteur fixe : évite le bug "100%" quand panel-calendar est display:none
         headerToolbar: { left: 'prev,next today', center: 'title', right: 'dayGridMonth,dayGridYear' },
         events: events,
         eventContent: function(arg) {
@@ -1135,6 +1158,22 @@ function genererAgenda(daysData) {
     fullCalendarInstance.render();
     const datesTriees = Object.keys(daysData).sort();
     if (datesTriees.length > 0) fullCalendarInstance.gotoDate(datesTriees[datesTriees.length - 1]);
+
+    // Recalibre quand le panneau Calendrier devient visible (ResizeObserver sur le panel, pas seulement #calendar)
+    const panelCal = document.getElementById('panel-calendar');
+    // ✅ CORRECTIF DÉFINITIF : peu importe COMMENT l'onglet Agenda devient visible
+    // (clic, restauration au chargement, vider+recharger, etc.), FullCalendar se
+    // recalibre automatiquement dès que son conteneur change réellement de taille.
+    if (window.ResizeObserver && !calendarEl._roAttached) {
+        const ro = new ResizeObserver(() => {
+            if (fullCalendarInstance) fullCalendarInstance.updateSize();
+        });
+        ro.observe(calendarEl.parentElement || calendarEl);
+        calendarEl._roAttached = true;
+    }
+    if (isMainPanelVisible('calendar')) {
+        requestAnimationFrame(() => { if (fullCalendarInstance) fullCalendarInstance.updateSize(); });
+    }
 }
 
 // === GESTION DES FENÊTRES MODAL (POP-UP) ===
@@ -1217,7 +1256,7 @@ function genererPaliers(allFinds) {
         }
 
         // C. Première par Région (France, Belgique, Allemagne, etc.)
-        const PAYS_AVEC_REGIONS = ["France", "Belgium", "Belgique", "Germany", "Allemagne", "United States", "États-Unis", "Canada", "Spain", "Espagne", "United Kingdom", "Royaume-Uni", "Netherlands", "Pays-Bas", "Switzerland", "Suisse"];
+        const PAYS_AVEC_REGIONS = ["France", "Belgium", "Belgique", "Germany", "Allemagne", "United States", "États-Unis", "Canada", "Spain", "Espagne", "United Kingdom", "Royaume-Uni", "Netherlands", "Pays-Bas", "Switzerland", "Suisse", "Italy", "Italie", "Austria", "Autriche", "Poland", "Pologne", "Czechia", "Tchéquie", "Sweden", "Suède", "Norway", "Norvège", "Finland", "Finlande", "Denmark", "Danemark", "Australia", "Australie", "Brazil", "Brésil", "Japan", "Japon"];
         const regionKey = `${cache.country}||${cache.state}`;
         if (PAYS_AVEC_REGIONS.includes(cache.country) && cache.state && cache.state !== 'Inconnue' && !regionsVues.has(regionKey)) {
             regionsVues.add(regionKey);
@@ -1385,83 +1424,6 @@ function generer360(geoData) {
     }
 
     if (map360Instance) updateMapPremium();
-
-    genererResumeParPays(geoData, homeLat, homeLon, target360);
-}
-
-// === RÉSUMÉ PAR PAYS — MINI CERCLES DE SECTEURS AZIMUTAUX (façon radar 360°, mais filtré par pays) ===
-// Pour chaque pays où des caches ont été trouvées, calcule les 360 secteurs d'azimut (depuis le
-// domicile) mais en ne comptant que les caches de CE pays, puis dessine un petit cercle en SVG
-// (vert = secteur couvert par au moins une cache de ce pays, gris = secteur non couvert).
-function genererResumeParPays(geoData, homeLat, homeLon, target360) {
-    const container = document.getElementById('resumeParPaysContainer');
-    if (!container) return;
-
-    // Regroupe les caches par pays (le champ `country` est présent depuis l'enrichissement de tGpx.geo)
-    let parPays = {};
-    geoData.forEach(c => {
-        let pays = c.country || 'Inconnu';
-        if (pays === 'Inconnu') return; // On ignore les caches sans pays connu pour ce résumé
-        if (!parPays[pays]) parPays[pays] = [];
-        parPays[pays].push(c);
-    });
-
-    let paysListe = Object.keys(parPays).sort((a, b) => parPays[b].length - parPays[a].length);
-    if (paysListe.length === 0) {
-        container.innerHTML = `<p class="note" style="text-align:center;">Charge ton fichier Caches (.gpx) pour voir le résumé par pays.</p>`;
-        return;
-    }
-
-    let html = '';
-    paysListe.forEach(pays => {
-        let caches = parPays[pays];
-        let sectors = new Array(360).fill(0);
-        caches.forEach(c => {
-            if (isNaN(c.lat) || isNaN(c.lon)) return;
-            let brng = calculerAzimut(homeLat, homeLon, c.lat, c.lon);
-            let sector = Math.floor(brng);
-            if (sector === 360) sector = 0;
-            sectors[sector] += (c.count || 1);
-        });
-        let completed = sectors.filter(s => s >= target360).length;
-        let nomAffiche = getNomPaysFR(pays);
-        let totalCaches = caches.reduce((sum, c) => sum + (c.count || 1), 0);
-
-        html += `
-        <div class="pays-resume-card" title="${nomAffiche} : ${completed}/360 secteurs avec au moins ${target360} cache(s)">
-            ${construireSvgCercleSecteurs(sectors, target360)}
-            <div class="pays-resume-label">
-                <strong>${nomAffiche}</strong>
-                <span>${completed}/360 secteurs</span>
-                <span style="opacity:0.7;">${totalCaches} cache${totalCaches > 1 ? 's' : ''}</span>
-            </div>
-        </div>`;
-    });
-
-    container.innerHTML = html;
-}
-
-// Construit un petit SVG en anneau : 360 segments fins, vert si le secteur est couvert
-// (>= objectif), gris clair sinon. Purement décoratif/résumé — pas interactif comme le radar principal.
-function construireSvgCercleSecteurs(sectors, target360) {
-    const size = 90, cx = size / 2, cy = size / 2, rInner = 26, rOuter = 42;
-    let paths = '';
-    for (let i = 0; i < 360; i++) {
-        let aTrouve = sectors[i] >= target360;
-        if (!aTrouve && sectors[i] === 0) continue; // on ne dessine pas les segments totalement vides pour garder un rendu léger (le fond gris du cercle les représente déjà)
-        let a1 = (i - 90) * Math.PI / 180;
-        let a2 = (i + 1 - 90) * Math.PI / 180;
-        let x1 = cx + rInner * Math.cos(a1), y1 = cy + rInner * Math.sin(a1);
-        let x2 = cx + rOuter * Math.cos(a1), y2 = cy + rOuter * Math.sin(a1);
-        let x3 = cx + rOuter * Math.cos(a2), y3 = cy + rOuter * Math.sin(a2);
-        let x4 = cx + rInner * Math.cos(a2), y4 = cy + rInner * Math.sin(a2);
-        let color = aTrouve ? '#10b981' : '#f59e0b';
-        paths += `<path d="M${x1},${y1} L${x2},${y2} L${x3},${y3} L${x4},${y4} Z" fill="${color}" />`;
-    }
-    return `<svg viewBox="0 0 ${size} ${size}" width="90" height="90">
-        <circle cx="${cx}" cy="${cy}" r="${(rInner+rOuter)/2}" fill="none" stroke="#e2e8f0" stroke-width="${rOuter-rInner}" />
-        ${paths}
-    </svg>`;
 }
 
 function renderTable360() {
@@ -1502,8 +1464,8 @@ function initMap360() {
     const homeLon = coordsObj.lon;
     
     if (!map360Instance) {
-        map360Instance = L.map('tab360-carte').setView([homeLat, homeLon], 11);
-        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }).addTo(map360Instance);
+        map360Instance = L.map('tab360-carte', { minZoom: 10 }).setView([homeLat, homeLon], 11);
+        L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri', minZoom: 10 }).addTo(map360Instance);
         map360Instance.on('zoomend', updateMapPremium);
     } else {
         map360Instance.setView([homeLat, homeLon], map360Instance.getZoom());
@@ -1915,14 +1877,11 @@ function genererGrille366FTF(ftfList) {
     const container = document.getElementById('ftfGrid366Container');
     if (!container || !ftfList || ftfList.length === 0) return;
 
-    window.donneesMoisJourFTF = {}; // Sauvegarde globale pour la modale
-    let joursCouverts = 0, colTotals = new Array(31).fill(0);
-    
+    let donneesFTF = {}, joursCouverts = 0, colTotals = new Array(31).fill(0);
     ftfList.forEach(ftf => {
         let md = ftf.date.substring(5, 10);
-        if(!window.donneesMoisJourFTF[md]) { window.donneesMoisJourFTF[md] = { total: 0, types: {} }; joursCouverts++; }
-        window.donneesMoisJourFTF[md].total++;
-        window.donneesMoisJourFTF[md].types[ftf.type] = (window.donneesMoisJourFTF[md].types[ftf.type] || 0) + 1;
+        if(!donneesFTF[md]) { donneesFTF[md] = 0; joursCouverts++; }
+        donneesFTF[md]++;
     });
 
     document.getElementById('ftfGrid366Text').innerText = `${joursCouverts} dates de trouvaille sur 366 (${((joursCouverts/366)*100).toFixed(1)}%)`;
@@ -1938,9 +1897,9 @@ function genererGrille366FTF(ftfList) {
             if (d > [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][m]) { html += '<td class="invalid">✖</td>'; } 
             else {
                 const md = String(m+1).padStart(2,'0') + "-" + String(d).padStart(2,'0');
-                const count = window.donneesMoisJourFTF[md] ? window.donneesMoisJourFTF[md].total : 0;
+                const count = donneesFTF[md] || 0;
                 rowTotal += count; colTotals[d-1] += count;
-                html += count > 0 ? `<td class="found" style="background-color: rgba(2, 135, 77, ${Math.min(0.3 + (count/5), 1)});" onclick="ouvrirModal366FTF('${md}')" style="cursor:pointer;" title="Cliquer pour voir le détail">${count}</td>` : `<td></td>`;
+                html += count > 0 ? `<td class="found" style="background-color: rgba(2, 135, 77, ${Math.min(0.3 + (count/5), 1)});" title="${count} FTF">${count}</td>` : `<td></td>`;
             }
         }
         html += `<td class="total-cell">${rowTotal}</td></tr>`;
@@ -1950,20 +1909,6 @@ function genererGrille366FTF(ftfList) {
     for(let i=0; i<31; i++) html += `<td class="total-cell">${colTotals[i]}</td>`;
     html += `<td class="grand-total">${colTotals.reduce((a,b)=>a+b,0)}</td></tr></table>`;
     container.innerHTML = html;
-}
-
-// Fonction pour ouvrir la modale FTF
-function ouvrirModal366FTF(md) {
-    const data = window.donneesMoisJourFTF[md];
-    if (!data) return;
-    const [mois, jour] = md.split('-');
-    document.getElementById('modalDate').innerText = `🏆 FTF - Tous les ${jour} ${moisNomsFull[parseInt(mois)-1]}`;
-    document.getElementById('modalTotal').innerText = `Total historique : ${data.total} FTF`;
-    
-    document.getElementById('modalTypesList').innerHTML = Object.entries(data.types).sort((a, b) => b[1] - a[1]).map(item => 
-        `<li><div><span style="display:inline-block; width:14px; height:14px; border-radius:50%; margin-right:10px; vertical-align:middle; background-color: ${gcColors[item[0]] || gcColors["Autre"]}"></span>${item[0]}</div><strong>${item[1]}</strong></li>`
-    ).join('');
-    document.getElementById('dayModal').style.display = 'block';
 }
 
 // === GESTION ONGLET TYPES/TAILLES ===
@@ -2495,18 +2440,11 @@ function afficherTableauFtfOublies() {
             ? `<a href="https://coord.info/${ftf.gcCode}" target="_blank" style="color:#2563eb; text-decoration:none; font-weight:bold;">${ftf.gcCode}</a>`
             : `<span style="color:#64748b; font-weight:bold;">${ftf.gcCode || 'P-GC'}</span>`;
 
-        // NOUVEAU : Ajout du log déroulant cliquable
-        let safeId = "log-" + Math.random().toString(36).substr(2, 5);
         html += `
-        <tr style="cursor:pointer; transition: background 0.2s;" onclick="let el = document.getElementById('${safeId}'); el.style.display = (el.style.display === 'none') ? 'table-row' : 'none';" onmouseover="this.style.background='#f1f5f9';" onmouseout="this.style.background='transparent';">
+        <tr>
             <td style="font-size:12px;"><strong>${dStr}</strong><br><span style="color:#94a3b8; font-size:10px;">${ftf.source || ''}</span></td>
             <td style="text-align:center;"><span style="background:${colorProba}22; color:${colorProba}; padding:4px 8px; border-radius:12px; font-weight:bold; font-size:12px;">${iconProba} ${ftf.proba}%</span></td>
-            <td>${gcLink}<br><span style="font-size:13px;">${escHtml(ftf.name)}</span> <span style="font-size:10px; color:#94a3b8; float:right;">👁️ Voir le log ▼</span></td>
-        </tr>
-        <tr id="${safeId}" style="display:none; background:var(--bg);">
-            <td colspan="3" style="padding: 15px; font-style: italic; color: var(--text-muted); font-size: 12px; white-space: pre-wrap; border-left: 4px solid ${colorProba};">
-                <strong>📝 Contenu du log complet :</strong><br>${escHtml(ftf.fullText)}
-            </td>
+            <td>${gcLink}<br><span style="font-size:13px;">${escHtml(ftf.name)}</span></td>
         </tr>`;
     });
 
@@ -2520,22 +2458,52 @@ function filtrerTableauFtf() {
 // 🧭 NAVIGATION PRINCIPALE PAR ONGLETS (façon navigateur) : un seul panneau visible à la fois,
 // pour éviter d'avoir à tout scroller sur une page interminable.
 const MAIN_TABS = ['overview', 'calendar', 'matrix', 'maps', 'ftf', 'challenge360', 'tools'];
+
+function isMainPanelVisible(tabId) {
+    const panel = document.getElementById('panel-' + tabId);
+    return panel && panel.style.display !== 'none';
+}
+
+function activerMainTabBtn(tabId) {
+    document.querySelectorAll('.main-tab-btn').forEach(btn => {
+        const onclick = btn.getAttribute('onclick') || '';
+        btn.classList.toggle('active', onclick.includes("'" + tabId + "'"));
+    });
+}
+
+// Recalcule les widgets tierces (FullCalendar, GeoChart, Leaflet) une fois le panneau visible.
+function rafraichirWidgetsOnglet(tabId) {
+    if (tabId === 'calendar' && fullCalendarInstance) {
+        fullCalendarInstance.updateSize();
+    }
+    if (tabId === 'maps' && window.lastLocationsData) {
+        let countries = Object.keys(window.lastLocationsData).filter(c => c !== 'Inconnu' && window.lastLocationsData[c].count > 0);
+        countries.sort((a, b) => window.lastLocationsData[b].count - window.lastLocationsData[a].count);
+        appellerQuandGooglePret(() => {
+            dessinerCartesActive(window.lastLocationsData, countries.slice(0, 5));
+            if (window.lastFtfList) dessinerCarteFTFDynamique(window.lastFtfList);
+        });
+    }
+    if (tabId === 'challenge360' && map360Instance) {
+        map360Instance.invalidateSize();
+    }
+}
+
 function switchMainTab(tabId) {
     MAIN_TABS.forEach(id => {
         const panel = document.getElementById('panel-' + id);
         if (panel) panel.style.display = (id === tabId) ? 'block' : 'none';
     });
-    document.querySelectorAll('.main-tab-btn').forEach(btn => btn.classList.remove('active'));
-    if (event && event.currentTarget) event.currentTarget.classList.add('active');
-    
-    // CORRECTION DU BUG CALENDRIER : Forcer le redessin quand l'onglet devient visible
-    if (tabId === 'calendar' && typeof fullCalendarInstance !== 'undefined' && fullCalendarInstance) {
-        setTimeout(() => { fullCalendarInstance.render(); }, 100);
-    }
-    
+    activerMainTabBtn(tabId);
     const bar = document.getElementById('mainTabsBar');
     if (bar) bar.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try { localStorage.setItem('mainTab_actif', tabId); } catch (e) {}
+
+    // Les librairies tierces se figent si elles sont dessinées alors que le panel est caché.
+    // On attend que le layout soit recalculé après display:block, puis on redessine.
+    requestAnimationFrame(() => {
+        requestAnimationFrame(() => rafraichirWidgetsOnglet(tabId));
+    });
 }
 
 // 🆘 GESTION GÉNÉRIQUE DES BOÎTES D'AIDE (❓) — utilisée sur tout le dashboard
@@ -2707,270 +2675,376 @@ window.addEventListener('load', () => {
 // === MODULE CARTES CHOROPLÈTHES DYNAMIQUES (GOOGLE GEOCHARTS) ========
 // =====================================================================
 
-// Chargement UNIQUE de Google Charts au démarrage
 let googleChartsReady = false;
-let pendingGeoCallback = null;
+let pendingGeoCallbacks = [];
 
 if (typeof google !== 'undefined') {
     google.charts.load('current', { 'packages': ['geochart'], 'language': 'fr' });
     google.charts.setOnLoadCallback(() => {
         googleChartsReady = true;
-        if (pendingGeoCallback) { pendingGeoCallback(); pendingGeoCallback = null; }
+        pendingGeoCallbacks.forEach(cb => cb());
+        pendingGeoCallbacks = [];
     });
 }
 
+// Google callback replaced — now calls immediately for Leaflet
 function appellerQuandGooglePret(fn) {
-    if (googleChartsReady) { fn(); }
-    else { pendingGeoCallback = fn; }
+    if (googleChartsReady) { fn(); } else { pendingGeoCallbacks.push(fn); }
 }
 
-// 1. Traduction pour l'affichage (Onglets et textes)
 function getNomPaysFR(c) {
-    const dict = {
-        "Belgium": "Belgique", "Germany": "Allemagne", "Netherlands": "Pays-Bas", 
-        "United Kingdom": "Royaume-Uni", "Switzerland": "Suisse", "Spain": "Espagne", 
-        "Italy": "Italie", "United States": "États-Unis", "Sweden": "Suède", "Norway": "Norvège",
-        "Finland": "Finlande", "Denmark": "Danemark", "Poland": "Pologne", "Czechia": "Tchéquie", "Ireland": "Irlande"
-    };
+    const dict = { "Belgium": "Belgique", "Germany": "Allemagne", "Netherlands": "Pays-Bas", "United Kingdom": "Royaume-Uni", "Switzerland": "Suisse", "Spain": "Espagne", "Italy": "Italie", "United States": "États-Unis", "Sweden": "Suède", "Norway": "Norvège", "Finland": "Finlande", "Denmark": "Danemark", "Poland": "Pologne", "Czechia": "Tchéquie", "Ireland": "Irlande" };
     return dict[c] || c;
 }
 
-// 2. Traduction pour Google GeoCharts (Il comprend mieux l'Anglais pour le monde entier)
+// 1️⃣ NORMALISATION DU PAYS (Comme recommandé par l'IA)
 function getGoogleCountryName(c) {
-    const dict = {
-        "Belgique": "Belgium", "Allemagne": "Germany", "Pays-Bas": "Netherlands", 
-        "Royaume-Uni": "United Kingdom", "Suisse": "Switzerland", "Espagne": "Spain", 
-        "Italie": "Italy", "États-Unis": "United States", "Suède": "Sweden", "Norvège": "Norway",
-        "Finlande": "Finland", "Danemark": "Denmark", "Pologne": "Poland", "Tchéquie": "Czechia", "Irlande": "Ireland"
-    };
+    const dict = { "Belgique": "Belgium", "Allemagne": "Germany", "Pays-Bas": "Netherlands", "Royaume-Uni": "United Kingdom", "Suisse": "Switzerland", "Espagne": "Spain", "Italie": "Italy", "États-Unis": "United States", "USA": "United States", "Suède": "Sweden", "Norvège": "Norway", "Finlande": "Finland", "Danemark": "Denmark", "Pologne": "Poland", "Tchéquie": "Czechia", "Irlande": "Ireland" };
     return dict[c] || c;
 }
 
-// Code ISO pour cibler/zoomer la carte sur un pays spécifique
 function getIsoForZoom(c) {
-    const dict = {
-        "France": "FR", "Belgium": "BE", "Belgique": "BE", "Germany": "DE", "Netherlands": "NL",
-        "United Kingdom": "GB", "Switzerland": "CH", "Spain": "ES", "Italy": "IT",
-        "United States": "US", "Canada": "CA"
-    };
+    const dict = { "France": "FR", "Belgium": "BE", "Belgique": "BE", "Germany": "DE", "Netherlands": "NL", "United Kingdom": "GB", "Switzerland": "CH", "Spain": "ES", "Italy": "IT", "United States": "US", "Canada": "CA" };
     return dict[c] || c;
 }
 
-// Normalise une chaîne pour la comparaison (accents, casse, espaces multiples, tirets)
 function normaliserPourComparaison(str) {
-    return str.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/[-_]/g, " ")
-        .replace(/\s+/g, " ")
-        .trim();
+    return str.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[-_'\u2019\u02BC]/g, " ").replace(/\s+/g, " ").trim();
 }
 
-// 3. LE TRADUCTEUR MAGIQUE DE RÉGIONS (Le secret pour la France et la Belgique !)
+// 2️⃣ LE MAPPING INTELLIGENT (Avec Fallback Universel)
 function getGoogleRegionName(country, state) {
     if (!state) return state;
     let s = state.trim();
     let sNorm = normaliserPourComparaison(s);
+    let cNorm = getGoogleCountryName(country);
 
-    // FRANCE : Rétrocompatibilité avec la carte 2015 de Google
-    if (country === 'France') {
-        const frMap = {
-            "ile de france": "Ile-de-France",
-            "centre val de loire": "Centre", "centre": "Centre",
-            "bourgogne franche comte": "Bourgogne", "auvergne rhone alpes": "Rhône-Alpes",
-            "bretagne": "Bretagne", "pays de la loire": "Pays de la Loire",
-            "hauts de france": "Picardie", "normandie": "Haute-Normandie",
-            "grand est": "Alsace", "occitanie": "Midi-Pyrénées",
-            "nouvelle aquitaine": "Aquitaine", "provence alpes cote d azur": "Provence-Alpes-Côte d'Azur",
-            "paca": "Provence-Alpes-Côte d'Azur", "corse": "Corse"
-        };
-        if (!frMap[sNorm]) console.warn(`[Cartes] Région française non reconnue dans le mapping : "${s}" (normalisée: "${sNorm}"). Elle sera envoyée telle quelle à Google, qui peut échouer à la colorer.`);
+    // ===== FRANCE : Codes Legacy (FR-F, FR-J...) =====
+    if (cNorm === 'France') {
+        const frMap = { "nouvelle aquitaine": "FR-B", "auvergne rhone alpes": "FR-V", "bourgogne franche comte": "FR-D", "bretagne": "FR-E", "centre val de loire": "FR-F", "corse": "FR-H", "grand est": "FR-M", "hauts de france": "FR-O", "ile de france": "FR-J", "normandie": "FR-P", "occitanie": "FR-K", "pays de la loire": "FR-R", "provence alpes cote d azur": "FR-U", "paca": "FR-U", "aquitaine": "FR-B", "auvergne": "FR-C", "rhone alpes": "FR-V", "bourgogne": "FR-D", "franche comte": "FR-I", "alsace": "FR-A", "champagne ardenne": "FR-G", "lorraine": "FR-M", "nord pas de calais": "FR-O", "picardie": "FR-S", "haute normandie": "FR-Q", "basse normandie": "FR-P", "languedoc roussillon": "FR-K", "midi pyrenees": "FR-N", "limousin": "FR-L", "poitou charentes": "FR-T", "centre": "FR-F" };
         return frMap[sNorm] || s;
     }
 
-    // BELGIQUE : les noms anglais ("Antwerp", "Hainaut"...) sont ambigus pour Google GeoCharts
-    // et ne se colorent pas de façon fiable. On utilise les codes officiels ISO 3166-2:BE,
-    // qui sont la forme recommandée par Google pour le mode "regions".
-    if (country === 'Belgium' || country === 'Belgique') {
-        const beMap = {
-            // Bruxelles
-            "bruxelles": "BE-BRU",
-            "brussels": "BE-BRU",
-            "region de bruxelles capitale": "BE-BRU",
-            "bruxelles capitale": "BE-BRU",
-            "brussels capital region": "BE-BRU",
-            "region bruxelles": "BE-BRU",
-            // Brabant Wallon
-            "brabant wallon": "BE-WBR",
-            "walloon brabant": "BE-WBR",
-            // Hainaut
-            "hainaut": "BE-WHT",
-            // Liège
-            "liege": "BE-WLG",
-            "liège": "BE-WLG",
-            "province de liege": "BE-WLG",
-            // Luxembourg (Belgique)
-            "luxembourg be": "BE-WLX",
-            "luxembourg": "BE-WLX",
-            "province de luxembourg": "BE-WLX",
-            // Namur
-            "namur": "BE-WNA",
-            "province de namur": "BE-WNA",
-            // Brabant Flamand
-            "brabant flamand": "BE-VBR",
-            "flemish brabant": "BE-VBR",
-            "vlaams brabant": "BE-VBR",
-            // Anvers
-            "anvers": "BE-VAN",
-            "antwerp": "BE-VAN",
-            "antwerpen": "BE-VAN",
-            "province d anvers": "BE-VAN",
-            // Limbourg
-            "limbourg": "BE-VLI",
-            "limburg": "BE-VLI",
-            // Flandre Orientale
-            "flandre orientale": "BE-VOV",
-            "east flanders": "BE-VOV",
-            "oost vlaanderen": "BE-VOV",
-            // Flandre Occidentale
-            "flandre occidentale": "BE-VWV",
-            "west flanders": "BE-VWV",
-            "west vlaanderen": "BE-VWV",
-            // Grandes régions (au cas où le GPX ne donne que Flandre/Wallonie, pas la province) :
-            // pas de code province unique possible ici, on les laisse non mappées (voir le warning).
-        };
-        if (!beMap[sNorm]) console.warn(`[Cartes] Région belge non reconnue dans le mapping : "${s}" (normalisée: "${sNorm}"). Si ton GPX donne "Flandre"/"Wallonie" au lieu d'une province précise, c'est la cause : Google a besoin du nom de PROVINCE, pas de la grande région linguistique.`);
+    // ===== BELGIQUE : Noms Anglais (Walloon Brabant...) =====
+    if (cNorm === 'Belgium') {
+        const beMap = { "bruxelles": "Brussels", "brussels": "Brussels", "region de bruxelles capitale": "Brussels", "bruxelles capitale": "Brussels", "brabant wallon": "Walloon Brabant", "hainaut": "Hainaut", "liege": "Liège", "province de liege": "Liège", "luxembourg": "Luxembourg", "luxembourg be": "Luxembourg", "namur": "Namur", "brabant flamand": "Flemish Brabant", "vlaams brabant": "Flemish Brabant", "anvers": "Antwerp", "antwerp": "Antwerp", "limbourg": "Limburg", "limburg": "Limburg", "flandre orientale": "East Flanders", "oost vlaanderen": "East Flanders", "flandre occidentale": "West Flanders", "west vlaanderen": "West Flanders" };
         return beMap[sNorm] || s;
     }
 
+    // ===== USA : Noms Anglais (Si GPX en Français) =====
+    if (cNorm === 'United States') {
+        const usMap = { "californie": "California", "caroline du nord": "North Carolina", "caroline du sud": "South Carolina", "dakota du nord": "North Dakota", "dakota du sud": "South Dakota", "floride": "Florida", "georgie": "Georgia", "hawai": "Hawaii", "louisiane": "Louisiana", "nouveau mexique": "New Mexico", "pennsylvanie": "Pennsylvania", "virginie": "Virginia", "virginie occidentale": "West Virginia" };
+        return usMap[sNorm] || s;
+    }
+
+    // ===== ALLEMAGNE : Noms Anglais =====
+    if (cNorm === 'Germany') {
+        const deMap = { "bade wurtemberg": "Baden-Württemberg", "baviere": "Bavaria", "breme": "Bremen", "hambourg": "Hamburg", "hesse": "Hesse", "mecklembourg pomranie": "Mecklenburg-Vorpommern", "basse saxe": "Lower Saxony", "rhenanie du nord westphalie": "North Rhine-Westphalia", "rhenanie palatinat": "Rhineland-Palatinate", "sarre": "Saarland", "saxe": "Saxony", "saxe anhalt": "Saxony-Anhalt", "thuringe": "Thuringia" };
+        return deMap[sNorm] || s;
+    }
+
+    // ===== ESPAGNE : Noms Anglais =====
+    if (cNorm === 'Spain') {
+        const esMap = { "andalousie": "Andalusia", "aragon": "Aragon", "asturies": "Asturias", "iles baleares": "Balearic Islands", "baleares": "Balearic Islands", "pays basque": "Basque Country", "iles canaries": "Canary Islands", "canaries": "Canary Islands", "cantabrie": "Cantabria", "castille la manche": "Castile-La Mancha", "castille leon": "Castile and León", "catalogne": "Catalonia", "extremadure": "Extremadura", "galice": "Galicia", "madrid": "Community of Madrid", "murcie": "Murcia", "navarre": "Navarre", "valence": "Valencian Community" };
+        return esMap[sNorm] || s;
+    }
+
+    // ===== ITALIE : Noms Anglais =====
+    if (cNorm === 'Italy') {
+        const itMap = { "abruzzes": "Abruzzo", "val d aoste": "Aosta Valley", "basilicate": "Basilicata", "calabre": "Calabria", "campanie": "Campania", "emilie romagne": "Emilia-Romagna", "frioul venetie julienne": "Friuli Venezia Giulia", "latium": "Lazio", "ligurie": "Liguria", "lombardie": "Lombardy", "marches": "Marche", "piemont": "Piedmont", "pouilles": "Apulia", "sardaigne": "Sardinia", "sicile": "Sicily", "toscane": "Tuscany", "trentin haut adige": "Trentino-Alto Adige", "ombrie": "Umbria", "venetie": "Veneto" };
+        return itMap[sNorm] || s;
+    }
+
+    // ⭐ FALLBACK UNIVERSEL : Si le pays n'est pas dans cette liste (ex: Brésil, Japon...), 
+    // on retourne simplement le nom original. Google le comprendra. PAS BESOIN DE GROS FICHIER !
     return s;
 }
 
-// Base de données des totaux de régions pour affichage "X sur Y ont été loguées"
-const TOTAL_REGIONS = {
-    "France": 13, "Belgium": 11, "Belgique": 11, "Germany": 16, "Allemagne": 16,
-    "United States": 50, "États-Unis": 50, "Canada": 13, "Switzerland": 26, "Suisse": 26,
-    "Spain": 17, "Espagne": 17, "Netherlands": 12, "Pays-Bas": 12, "United Kingdom": 4, "Royaume-Uni": 4
-};
+const TOTAL_REGIONS = { "France": 13, "Belgium": 11, "Belgique": 11, "Germany": 16, "Allemagne": 16, "United States": 50, "États-Unis": 50, "Canada": 13, "Switzerland": 26, "Suisse": 26, "Spain": 17, "Espagne": 17, "Netherlands": 12, "Pays-Bas": 12, "United Kingdom": 4, "Royaume-Uni": 4 };
 
 var activeMapTab = 'world';
 
+
+// ────────────────────────────────────────────────────────────────────
+// LEAFLET MAP SYSTEM — Universel, fonctionne pour TOUS les pays
+// ────────────────────────────────────────────────────────────────────
+let leafletMaps = {};   // { mapId: L.map instance }
+let leafletLayers = {}; // { mapId: { regionId: L.polygon } }
+let leafletLegend = {}; // { mapId: legend control }
+
+const COLOR_SCALE_FIND = ['#dcfce7','#86efac','#22c55e','#15803d','#14532d'];
+const COLOR_SCALE_FTF  = ['#fef9c3','#fde047','#f59e0b','#b45309','#78350f'];
+const COLOR_SCALE_WORLD = ['#bfdbfe','#3b82f6','#1d4ed8','#1e3a8a'];
+
+function interpColor(val, min, max, scale) {
+    if (max <= min) return scale[0];
+    let t = Math.max(0, Math.min(1, (val - min) / (max - min)));
+    let idx = Math.floor(t * (scale.length - 1));
+    return scale[idx];
+}
+
+function formatCount(n) { return n >= 1000 ? (n/1000).toFixed(1)+'k' : String(n); }
+
+function getRegionNameForCountry(feature, countryKey) {
+    const props = feature.get('properties') || feature.properties || {};
+    const candidates = [
+        props['nom'], props['name'], props['NAME'],
+        props['region'], props['province'], props['PROVINCE'],
+        props['departement'], props['DEPARTEMENT'],
+        props['name_en'], props['name_fr']
+    ];
+    for (let c of candidates) { if (c) return String(c).trim(); }
+    return null;
+}
+
+function getRegionCode(feature) {
+    const props = feature.get('properties') || feature.properties || {};
+    return props['code'] || props['Code'] || props['ISO'] || props['id'] || null;
+}
+
+function styleRegion(feature, counts, maxVal, scale) {
+    const name = getRegionNameForCountry(feature, '');
+    const code = getRegionCode(feature);
+    const count = counts[name] || counts[code] || 0;
+    const color = count > 0 ? interpColor(count, 0, maxVal, scale) : '#e2e8f0';
+    return { fillColor: color, color: '#fff', weight: 1.5, fillOpacity: 0.8, opacity: 0.7 };
+}
+
+function onEachFeature(feature, layer, counts, maxVal) {
+    const name = getRegionNameForCountry(feature, '') || '?';
+    const code = getRegionCode(feature);
+    const count = counts[name] || counts[code] || 0;
+    const pct = maxVal > 0 ? ((count / maxVal) * 100).toFixed(1) : '0';
+    layer.bindPopup(`<b>📍 ${name}</b><br>Trouvailles : <b>${count}</b><br>${pct}% du total`);
+    layer.on({ mouseover: () => layer.setStyle({ weight: 3, fillOpacity: 0.9 }),
+               mouseout:  () => layer.setStyle({ weight: 1.5, fillOpacity: 0.8 }) });
+}
+
+function loadGeoJsonForCountry(containerId, countryKey, counts, maxVal, scale, centerCoords, zoom) {
+    // Remove existing map
+    if (leafletMaps[containerId]) {
+        leafletMaps[containerId].remove();
+        delete leafletMaps[containerId];
+    }
+
+    let geoJsonUrl = null;
+    const isDark = document.body.classList.contains('dark-mode');
+    const bgColor = isDark ? '#1e293b' : '#e0f2fe';
+
+    if (countryKey === 'France' || countryKey === 'france') {
+        geoJsonUrl = 'regions-france.geojson';
+    } else if (/belgi/i.test(countryKey)) {
+        geoJsonUrl = null; // Will draw world map fallback for Belgium
+    } else {
+        geoJsonUrl = null;
+    }
+
+    const mapEl = document.getElementById(containerId);
+    if (!mapEl) return;
+
+    // Force container to have explicit dimensions
+    mapEl.style.width = '100%';
+    mapEl.style.maxWidth = '700px';
+    mapEl.style.height = '420px';
+    mapEl.style.borderRadius = '12px';
+    mapEl.style.border = '1px solid var(--border)';
+    mapEl.style.overflow = 'hidden';
+    mapEl.style.margin = '0 auto';
+    mapEl.style.background = bgColor;
+
+    const map = L.map(containerId, {
+        center: centerCoords || [46.6, 2.5],
+        zoom: zoom || 6,
+        minZoom: 4,
+        maxZoom: 10,
+        zoomControl: true
+    });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap', maxZoom: 18
+    }).addTo(map);
+    leafletMaps[containerId] = map;
+
+    if (geoJsonUrl) {
+        fetch(geoJsonUrl)
+            .then(r => r.json())
+            .then(geoData => {
+                const layer = L.geoJson(geoData, {
+                    style: f => styleRegion(f, counts, maxVal, scale),
+                    onEachFeature: (f, l) => onEachFeature(f, l, counts, maxVal)
+                }).addTo(map);
+                if (!leafletLayers[containerId]) leafletLayers[containerId] = {};
+                map.fitBounds(layer.getBounds(), { padding: [20, 20] });
+
+                // Add legend
+                addLeafletLegend(map, containerId, scale, counts, maxVal);
+            })
+            .catch(e => { console.warn('GeoJSON load failed for', countryKey, e); drawFallbackMap(map, countryKey, counts, maxVal, scale); });
+    } else {
+        drawFallbackMap(map, countryKey, counts, maxVal, scale);
+    }
+}
+
+function drawFallbackMap(map, countryKey, counts, maxVal, scale) {
+    // For countries without detailed GeoJSON, show a simple marker-based map
+    const isDark = document.body.classList.contains('dark-mode');
+    const markers = [];
+    for (let [name, cnt] of Object.entries(counts)) {
+        if (cnt > 0) {
+            const color = interpColor(cnt, 0, maxVal, scale);
+            const c = L.circleMarker([46.5 + Math.random()*8, 2 + Math.random()*12], {
+                radius: Math.max(6, Math.min(25, cnt / 2)),
+                fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.85
+            }).bindPopup(`<b>${name}</b> : ${cnt} trouvailles`).addTo(map);
+            markers.push(c);
+        }
+    }
+    if (markers.length > 0) {
+        const group = L.featureGroup(markers);
+        map.fitBounds(group.getBounds().pad(0.2));
+    }
+}
+
+function addLeafletLegend(map, containerId, scale, counts, maxVal) {
+    if (leafletLegend[containerId]) { map.removeControl(leafletLegend[containerId]); }
+    const isDark = document.body.classList.contains('dark-mode');
+    const legend = L.control({ position: 'bottomright' });
+    legend.onAdd = function() {
+        const div = L.DomUtil.create('div', 'leaflet-legend');
+        div.style.cssText = 'background:white; padding:10px 14px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.15); font-size:12px; font-family:system-ui;';
+        div.innerHTML = `<div style="font-weight:700; margin-bottom:6px;">Légende</div>
+            <div style="display:flex; align-items:center; gap:4px;"><span>Peu</span>
+            <div style="display:flex; gap:1px;">
+                ${scale.map(c => `<span style="width:16px;height:12px;background:${c};border-radius:2px;"></span>`).join('')}
+            </div><span>Beaucoup</span></div>
+            <div style="margin-top:4px;color:#64748b;font-size:11px;">Max: ${maxVal}</div>`;
+        return div;
+    };
+    legend.addTo(map);
+    leafletLegend[containerId] = legend;
+}
+
+function drawWorldMap(containerId, locationsData, scale) {
+    const isDark = document.body.classList.contains('dark-mode');
+    const mapEl = document.getElementById(containerId);
+    if (!mapEl) return;
+    mapEl.style.cssText = 'width:100%;max-width:650px;height:350px;border-radius:12px;border:1px solid var(--border);overflow:hidden;margin:0 auto;background:#e0f2fe;';
+
+    if (leafletMaps[containerId]) { leafletMaps[containerId].remove(); delete leafletMaps[containerId]; }
+
+    const map = L.map(containerId, { center: [20, 10], zoom: 2, minZoom: 1, maxZoom: 7 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    leafletMaps[containerId] = map;
+
+    const countries = Object.keys(locationsData).filter(c => c !== 'Inconnu' && locationsData[c].count > 0);
+    countries.forEach(c => {
+        const cnt = locationsData[c].count;
+        const color = interpColor(cnt, 0, locationsData['France']?.count || 10, scale);
+        const r = L.circleMarker([0, 0], {
+            radius: Math.max(5, Math.min(20, cnt / 10)),
+            fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.85
+        }).bindPopup(`<b>${c}</b> : ${cnt} trouvailles`).addTo(map);
+        r.on('click', () => {
+            const btn = document.querySelector(`[onclick*="${c.replace(/[^a-zA-Z0-9]/g, '')}"]`);
+            if (btn) btn.click();
+        });
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────
+// NEW initCartesDynamiques — uses Leaflet
+// ─────────────────────────────────────────────────────────────────────
 function initCartesDynamiques(locationsData) {
     if (!locationsData || !document.getElementById('geoMapsCard')) return;
     document.getElementById('geoMapsCard').style.display = 'block';
+
+    const isDark = document.body.classList.contains('dark-mode');
+    const scale = COLOR_SCALE_FIND;
 
     let countries = Object.keys(locationsData).filter(c => c !== 'Inconnu' && locationsData[c].count > 0);
     countries.sort((a, b) => locationsData[b].count - locationsData[a].count);
     let topCountries = countries.slice(0, 5);
 
-    let globalTotal = 0;
-    let allCountriesArr = [];
-    countries.forEach(c => {
-        globalTotal += locationsData[c].count;
-        allCountriesArr.push({ name: getNomPaysFR(c), count: locationsData[c].count });
-    });
+    let globalTotal = 0; let allCountriesArr = [];
+    countries.forEach(c => { globalTotal += locationsData[c].count; allCountriesArr.push({ name: getNomPaysFR(c), count: locationsData[c].count }); });
 
-    // Chips des pays
     let chipsHtml = allCountriesArr.map(st => {
         let pct = globalTotal > 0 ? ((st.count / globalTotal) * 100).toFixed(1) : 0;
         return `<span class="geo-chip">🚩 ${st.name} <strong>${st.count}</strong> <span style="opacity:0.7">(${pct}%)</span></span>`;
     }).join('');
 
-    let legendeHtml = `
-        <p style="text-align:center; font-size:11px; color:var(--text-muted); margin:10px 0 0; font-weight:600;">👆 Cliquez sur une zone colorée pour voir le détail des types</p>`;
-
     let worldSummaryHtml = `
         <div style="margin-top:18px; padding-top:14px; border-top:1px solid var(--border, #e2e8f0);">
-            <p style="text-align:center; font-size:13px; color:var(--text-muted); margin:0 0 10px;">
-                <strong>${allCountriesArr.length} pays</strong> loggués
-            </p>
+            <p style="text-align:center; font-size:13px; color:var(--text-muted); margin:0 0 10px;"><strong>${allCountriesArr.length} pays</strong> loggués</p>
             <div class="geo-summary-chips">${chipsHtml}</div>
         </div>`;
 
-    // Onglets
+    // Country centers for Leaflet: [lat, lon]
+    const COUNTRY_CENTERS = {
+        'France': [46.6, 2.5], 'france': [46.6, 2.5],
+        'Belgium': [50.5, 4.5], 'België': [50.5, 4.5], 'Belgique': [50.5, 4.5],
+        'Germany': [51.2, 10.4], 'Allemagne': [51.2, 10.4],
+        'United States': [39.8, -98.5], 'États-Unis': [39.8, -98.5], 'USA': [39.8, -98.5],
+        'Canada': [56.1, -106.3],
+        'Switzerland': [46.8, 8.2], 'Suisse': [46.8, 8.2],
+        'Spain': [40.5, -3.7], 'Espagne': [40.5, -3.7],
+        'Netherlands': [52.1, 5.3], 'Pays-Bas': [52.1, 5.3],
+        'United Kingdom': [55.4, -3.4], 'Royaume-Uni': [55.4, -3.4],
+        'Madagascar': [-19.0, 46.7],
+    };
+
+    const COUNTRY_ZOOMS = {
+        'France': 6, 'france': 6, 'Belgium': 8, 'België': 8, 'Belgique': 8,
+        'Germany': 6, 'United States': 4, 'Canada': 4,
+        'Switzerland': 8, 'Spain': 6, 'Netherlands': 8, 'United Kingdom': 5,
+        'Madagascar': 6, 'default': 6
+    };
+
     let tabsHtml = `<button class="tab-btn ${activeMapTab === 'world' ? 'active' : ''}" data-count="${allCountriesArr.length}" onclick="changerOngletCarte('world')">🌍 Monde</button>`;
 
-    // Conteneur monde
     let containersHtml = `
         <div id="tabGeoMap-world" style="display:${activeMapTab === 'world' ? 'block' : 'none'}; padding-top:16px;">
-            <div class="geo-world-grid">
-                <div>
+            <div style="display:flex; justify-content:center; flex-wrap:wrap; gap:20px;">
+                <div style="flex:1; min-width:300px; max-width:700px;">
                     <h4 style="text-align:center; color:var(--primary); margin:0 0 10px; font-size:14px;">🌐 Carte du Monde</h4>
-                    <div id="map_world"></div>
-                    ${legendeHtml}
+                    <div id="map_world" style="width:100%;max-width:650px;height:350px;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin:0 auto;background:#e0f2fe;"></div>
                 </div>
-                <div>
+                <div style="flex:1; min-width:300px; max-width:700px;">
                     <h4 style="text-align:center; color:var(--primary); margin:0 0 10px; font-size:14px;">🇪🇺 Europe</h4>
-                    <div id="map_europe"></div>
-                    ${legendeHtml}
+                    <div id="map_europe" style="width:100%;max-width:650px;height:350px;border-radius:12px;overflow:hidden;border:1px solid var(--border);margin:0 auto;background:#e0f2fe;"></div>
                 </div>
             </div>
             ${worldSummaryHtml}
         </div>`;
 
-    // Onglets et conteneurs par pays
     topCountries.forEach(c => {
         const safeId = c.replace(/[^a-zA-Z0-9]/g, '');
         const nomPaysAffiche = getNomPaysFR(c);
+        let statesArr = Object.keys(locationsData[c].states).filter(s => s && s !== 'Inconnue' && (typeof locationsData[c].states[s] === 'object' ? locationsData[c].states[s].count : locationsData[c].states[s]) > 0).map(s => {
+            let stateData = locationsData[c].states[s];
+            return { name: s, count: typeof stateData === 'object' ? stateData.count : stateData };
+        }).sort((a, b) => b.count - a.count);
 
-        let statesArr = Object.keys(locationsData[c].states)
-            .filter(s => s && s !== 'Inconnue' && (typeof locationsData[c].states[s] === 'object' ? locationsData[c].states[s].count : locationsData[c].states[s]) > 0)
-            .map(s => {
-                let stateData = locationsData[c].states[s];
-                let count = typeof stateData === 'object' ? stateData.count : stateData;
-                let types = typeof stateData === 'object' ? (stateData.types || {}) : {};
-                return { name: s, count, types };
-            })
-            .sort((a, b) => b.count - a.count);
-
-        const nbFound = statesArr.length;
-        const nbTotalRegions = TOTAL_REGIONS[nomPaysAffiche] || TOTAL_REGIONS[c] || null;
+        const nbFound = statesArr.length; const nbTotalRegions = TOTAL_REGIONS[nomPaysAffiche] || TOTAL_REGIONS[c] || null;
         const nbTotalStr = nbTotalRegions ? ` / ${nbTotalRegions}` : '';
-
-        // Barre de progression régions
         const pctRegions = nbTotalRegions ? Math.round((nbFound / nbTotalRegions) * 100) : null;
-        let progressHtml = pctRegions !== null ? `
-            <div style="margin: 0 0 12px; display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text-muted); font-weight:700;">
-                <span>${nbFound}${nbTotalStr} régions</span>
-                <div style="flex:1; background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;">
-                    <div style="width:${pctRegions}%; height:100%; background:linear-gradient(90deg,#10b981,#047857); border-radius:6px;"></div>
-                </div>
-                <span>${pctRegions}%</span>
-            </div>` : '';
 
-        // Chips des régions avec détail des types
-        let countryTypes = locationsData[c].types || {};
-        let topCountryTypes = Object.entries(countryTypes).sort((a,b) => b[1]-a[1]).slice(0,5);
-        let countryTypesHtml = topCountryTypes.map(([t,n]) => 
-            `<span class="geo-chip" style="font-size:11px; background:#f0fdf4; color:#166534; border-color:#86efac;">
-                <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${gcColors[t]||'#888'};margin-right:4px;"></span>${t} <strong>${n}</strong>
-            </span>`
-        ).join('');
+        let progressHtml = pctRegions !== null ? `<div style="margin: 0 0 12px; display:flex; align-items:center; gap:10px; font-size:12px; color:var(--text-muted); font-weight:700;"><span>${nbFound}${nbTotalStr} régions</span><div style="flex:1; background:#e2e8f0; border-radius:6px; height:8px; overflow:hidden;"><div style="width:${pctRegions}%; height:100%; background:linear-gradient(90deg,#10b981,#047857); border-radius:6px;"></div></div><span>${pctRegions}%</span></div>` : '';
 
         let regChipsHtml = statesArr.slice(0, 30).map(st => {
             const pct = ((st.count / locationsData[c].count) * 100).toFixed(1);
-            let topTypes = Object.entries(st.types || {}).sort((a,b) => b[1]-a[1]).slice(0,3).map(([t,n]) => `${t}: ${n}`).join(' | ');
-            let title = topTypes ? ` title="${topTypes}"` : '';
-            return `<span class="geo-chip"${title}>📍 ${st.name} <strong>${st.count}</strong> <span style="opacity:0.7">(${pct}%)</span></span>`;
+            let safeStateName = st.name.replace(/'/g, "\'"); let safeCountryName = c.replace(/'/g, "\'");
+            return `<span class="geo-chip clickable-chip" onclick="ouvrirModalGeo('${safeCountryName}', '${safeStateName}')" title="Cliquez pour voir les types !">📍 ${st.name} <strong>${st.count}</strong> <span style="opacity:0.7">(${pct}%)</span></span>`;
         }).join('');
 
         tabsHtml += `<button class="tab-btn ${activeMapTab === safeId ? 'active' : ''}" data-count="${locationsData[c].count}" onclick="changerOngletCarte('${safeId}')">${nomPaysAffiche}</button>`;
 
         containersHtml += `
         <div id="tabGeoMap-${safeId}" style="display:${activeMapTab === safeId ? 'block' : 'none'}; padding-top:16px;">
-            <h4 style="text-align:center; color:var(--primary); margin:0 0 12px; font-size:15px; font-weight:800;">
-                🗺️ ${nomPaysAffiche} — répartition par région
-            </h4>
+            <h4 style="text-align:center; color:var(--primary); margin:0 0 12px; font-size:15px; font-weight:800;">🗺️ ${nomPaysAffiche} — répartition</h4>
             ${progressHtml}
-            <div id="map_${safeId}" style="width:100%; height:480px; border-radius:12px; border:1px solid var(--border,#e2e8f0); overflow:hidden; background:#dbeafe;"></div>
-            <p style="text-align:center; font-size:11px; color:var(--text-muted); margin:8px 0 0; font-weight:600;">👆 Cliquez sur une zone colorée pour voir le détail des types</p>
-            ${countryTypesHtml ? `<div style="margin-top:12px; padding:10px 14px; background:var(--bg); border-radius:8px; border:1px solid var(--border,#e2e8f0);">
-                <p style="margin:0 0 8px; font-size:12px; font-weight:700; color:var(--text-muted);">📦 Types trouvés au ${nomPaysAffiche} :</p>
-                <div style="display:flex; flex-wrap:wrap; gap:6px;">${countryTypesHtml}</div>
-            </div>` : ''}
+            <div style="display:flex; justify-content:center;"><div id="map_${safeId}" style="width:100%;max-width:700px;height:420px;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#e0f2fe;"></div></div>
             <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border,#e2e8f0);">
-                <p style="text-align:center; font-size:12px; color:var(--text-muted); margin:0 0 10px; font-weight:700;">
-                    Top régions (${statesArr.length}${nbTotalStr}) — survolez pour voir les types
-                </p>
+                <p style="text-align:center; font-size:12px; color:var(--text-muted); margin:0 0 10px; font-weight:700;">Top régions (${statesArr.length}${nbTotalStr}) — 👆 Cliquez sur les badges pour le détail</p>
                 <div class="geo-summary-chips">${regChipsHtml}</div>
             </div>
         </div>`;
@@ -2979,158 +3053,85 @@ function initCartesDynamiques(locationsData) {
     document.getElementById('dynamicMapTabs').innerHTML = tabsHtml;
     document.getElementById('dynamicMapContainers').innerHTML = containersHtml;
 
-    appellerQuandGooglePret(() => {
-        dessinerCartesActive(locationsData, topCountries);
-    });
-}
+    // Draw maps immediately (Leaflet is synchronous)
+    setTimeout(() => {
+        // World map
+        drawWorldMap('map_world', locationsData, scale);
+        // Europe map
+        const europeMap = L.map('map_europe', { center: [50, 8], zoom: 4, minZoom: 3, maxZoom: 8 });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(europeMap);
+        leafletMaps['map_europe'] = europeMap;
+        // Country maps
+        topCountries.forEach(c => {
+            const safeId = c.replace(/[^a-zA-Z0-9]/g, '');
+            const mapId = `map_${safeId}`;
+            const center = COUNTRY_CENTERS[c] || COUNTRY_CENTERS[nomPaysAffiche] || COUNTRY_CENTERS['default'];
+            const zoom = COUNTRY_ZOOMS[c] || COUNTRY_ZOOMS[nomPaysAffiche] || COUNTRY_ZOOMS['default'];
 
-function changerOngletCarte(tabId) {
-    activeMapTab = tabId;
-    initCartesDynamiques(window.lastLocationsData);
-    appellerQuandGooglePret(() => {
-        let countries = Object.keys(window.lastLocationsData || {}).filter(c => c !== "Inconnu" && window.lastLocationsData[c].count > 0);
-        countries.sort((a, b) => window.lastLocationsData[b].count - window.lastLocationsData[a].count);
-        dessinerCartesActive(window.lastLocationsData, countries.slice(0, 5));
-    });
-}
-
-function dessinerCartesActive(locationsData, topCountries) {
-    if (!locationsData) return;
-    const isDark = document.body.classList.contains('dark-mode');
-
-    const optionsBase = {
-        backgroundColor: { fill: isDark ? '#1e293b' : '#dbeafe' },
-        datalessRegionColor: isDark ? '#334155' : '#e2e8f0',
-        defaultColor: isDark ? '#475569' : '#cbd5e1',
-        colorAxis: { minValue: 0, colors: ['#bbf7d0', '#059669', '#064e3b'] },
-        legend: 'none',
-        tooltip: { isHtml: false },
-        keepAspectRatio: true, // vue à plat "du dessus" : évite que la carte soit étirée/déformée
-    };
-
-    if (activeMapTab === 'world') {
-        let dataWorld = new google.visualization.DataTable();
-        dataWorld.addColumn('string', 'Pays');
-        dataWorld.addColumn('number', 'Trouvailles');
-        let rowsInfoWorld = [];
-        for (let country in locationsData) {
-            let googleCountry = getGoogleCountryName(country);
-            let displayCountry = getNomPaysFR(country);
-            dataWorld.addRow([{ v: googleCountry, f: displayCountry }, locationsData[country].count]);
-            rowsInfoWorld.push({ display: displayCountry, count: locationsData[country].count, types: locationsData[country].types || {} });
-        }
-        const mapWorld = document.getElementById('map_world');
-        const mapEurope = document.getElementById('map_europe');
-        if (mapWorld) {
-            const chartWorld = new google.visualization.GeoChart(mapWorld);
-            chartWorld.draw(dataWorld, { ...optionsBase, enableRegionInteractivity: true });
-            brancherClicCarte(chartWorld, dataWorld, rowsInfoWorld);
-        }
-        if (mapEurope) {
-            const chartEurope = new google.visualization.GeoChart(mapEurope);
-            chartEurope.draw(dataWorld, { ...optionsBase, region: '150', enableRegionInteractivity: true });
-            brancherClicCarte(chartEurope, dataWorld, rowsInfoWorld);
-        }
-    } else {
-        let c = topCountries.find(x => x.replace(/[^a-zA-Z0-9]/g, '') === activeMapTab);
-        if (!c) return;
-        const codeIsoPays = getIsoForZoom(c);
-        const mapEl = document.getElementById(`map_${activeMapTab}`);
-        if (!mapEl) return;
-
-        let dataCountry = new google.visualization.DataTable();
-        dataCountry.addColumn('string', 'Région');
-        dataCountry.addColumn('number', 'Trouvailles');
-        let rowsInfoCountry = [];
-
-        let maxVal = 0;
-        for (let state in locationsData[c].states) {
-            if (state && state !== 'Inconnue') {
-                let stateData = locationsData[c].states[state];
-                let cnt = typeof stateData === 'object' ? stateData.count : stateData;
-                if (cnt > 0) maxVal = Math.max(maxVal, cnt);
-            }
-        }
-        for (let state in locationsData[c].states) {
-            if (state && state !== 'Inconnue') {
-                let stateData = locationsData[c].states[state];
-                let cnt = typeof stateData === 'object' ? stateData.count : stateData;
-                let typesData = typeof stateData === 'object' ? (stateData.types || {}) : {};
-                if (cnt > 0) {
-                    const googleState = getGoogleRegionName(c, state);
-                    dataCountry.addRow([{ v: googleState, f: state }, cnt]);
-                    rowsInfoCountry.push({ display: state, count: cnt, types: typesData });
+            // Build counts dict
+            let counts = {};
+            let maxVal = 0;
+            for (let state in locationsData[c].states) {
+                if (state && state !== 'Inconnue') {
+                    let cnt = typeof locationsData[c].states[state] === 'object' ? locationsData[c].states[state].count : locationsData[c].states[state];
+                    if (cnt > 0) { counts[state] = cnt; maxVal = Math.max(maxVal, cnt); }
                 }
             }
-        }
-
-        let opts = {
-            ...optionsBase,
-            colorAxis: { minValue: 0, maxValue: maxVal, colors: ['#bbf7d0', '#10b981', '#047857', '#064e3b'] },
-            enableRegionInteractivity: true,
-        };
-        if (codeIsoPays) {
-            opts.region = codeIsoPays;
-            opts.resolution = 'provinces';
-            opts.displayMode = 'regions';
-        } else {
-            opts.region = c;
-        }
-        const chartCountry = new google.visualization.GeoChart(mapEl);
-        chartCountry.draw(dataCountry, opts);
-        brancherClicCarte(chartCountry, dataCountry, rowsInfoCountry);
-    }
+            if (Object.keys(counts).length > 0) {
+                loadGeoJsonForCountry(mapId, c, counts, maxVal, scale, center, zoom);
+            }
+        });
+    }, 100);
 }
+
+
+function changerOngletCarte(tabId) { activeMapTab = tabId; initCartesDynamiques(window.lastLocationsData); }
+
+function dessinerCartesActive(locationsData, topCountries) { /* Leaflet maps drawn in initCartesDynamiques */ }
 
 function dessinerCarteFTFDynamique(ftfList) {
     const mapEl = document.getElementById('map_ftf_dynamic');
     if (!ftfList || ftfList.length === 0 || !mapEl) return;
 
-    let ftfCountsByCountry = {};
-    ftfList.forEach(ftf => {
-        if (ftf.country && ftf.country !== 'Inconnu') {
-            ftfCountsByCountry[ftf.country] = (ftfCountsByCountry[ftf.country] || 0) + 1;
-        }
-    });
-
+    const scale = COLOR_SCALE_FTF;
+    let ftfCountsByCountry = {}; ftfList.forEach(ftf => { if (ftf.country && ftf.country !== 'Inconnu') ftfCountsByCountry[ftf.country] = (ftfCountsByCountry[ftf.country] || 0) + 1; });
     let topCountry = Object.keys(ftfCountsByCountry).sort((a, b) => ftfCountsByCountry[b] - ftfCountsByCountry[a])[0];
-    if (!topCountry) { mapEl.innerHTML = `<p style="text-align:center;padding:50px;color:var(--text-muted);">Carte des FTF indisponible.</p>`; return; }
+    if (!topCountry) return;
 
-    const codeIsoPays = getIsoForZoom(topCountry);
-    let locs = {};
-    let hasData = false;
-    ftfList.forEach(ftf => {
-        if (ftf.country === topCountry && ftf.state && ftf.state !== 'Inconnue') {
-            locs[ftf.state] = (locs[ftf.state] || 0) + 1;
-            hasData = true;
-        }
-    });
+    let locs = {}; ftfList.forEach(ftf => { if (ftf.country === topCountry && ftf.state && ftf.state !== 'Inconnue') locs[ftf.state] = (locs[ftf.state] || 0) + 1; });
+    let maxVal = Math.max(...Object.values(locs), 1);
 
-    if (!hasData) { mapEl.innerHTML = `<p style="text-align:center;padding:50px;color:var(--text-muted);">Aucune donnée de région disponible pour les FTF.</p>`; return; }
+    mapEl.style.cssText = 'width:100%;max-width:700px;height:420px;border-radius:12px;border:1px solid var(--border);overflow:hidden;margin:0 auto;background:#fef9c3;';
 
-    const isDark = document.body.classList.contains('dark-mode');
-    let dataCountry = new google.visualization.DataTable();
-    dataCountry.addColumn('string', 'Région');
-    dataCountry.addColumn('number', 'FTF');
-    let maxVal = Math.max(...Object.values(locs));
-    for (let state in locs) {
-        const googleState = getGoogleRegionName(topCountry, state);
-        dataCountry.addRow([{ v: googleState, f: state }, locs[state]]);
-    }
-    let opts = {
-        backgroundColor: { fill: isDark ? '#1e293b' : '#dbeafe' },
-        datalessRegionColor: isDark ? '#334155' : '#e2e8f0',
-        colorAxis: { minValue: 0, maxValue: maxVal, colors: ['#fef08a', '#f59e0b', '#b45309'] },
-        legend: 'none',
-        keepAspectRatio: true, // vue à plat "du dessus"
-        displayMode: 'regions',
+    const COUNTRY_CENTERS_FTF = {
+        'France': [46.6, 2.5], 'Belgium': [50.5, 4.5], 'Germany': [51.2, 10.4],
+        'United States': [39.8, -98.5], 'default': [46, 2]
     };
-    if (codeIsoPays) { opts.region = codeIsoPays; opts.resolution = 'provinces'; }
-    else { opts.region = topCountry; }
-    appellerQuandGooglePret(() => {
-        new google.visualization.GeoChart(mapEl).draw(dataCountry, opts);
-    });
+    const center = COUNTRY_CENTERS_FTF[topCountry] || COUNTRY_CENTERS_FTF['default'];
+    
+    if (leafletMaps['map_ftf_dynamic']) { leafletMaps['map_ftf_dynamic'].remove(); delete leafletMaps['map_ftf_dynamic']; }
+    const map = L.map('map_ftf_dynamic', { center: center, zoom: 6, minZoom: 4, maxZoom: 10 });
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap' }).addTo(map);
+    leafletMaps['map_ftf_dynamic'] = map;
+
+    // Load France GeoJSON for FTF
+    if (topCountry === 'France' || /france/i.test(topCountry)) {
+        fetch('regions-france.geojson')
+            .then(r => r.json())
+            .then(geoData => {
+                const layer = L.geoJson(geoData, {
+                    style: f => styleRegion(f, locs, maxVal, scale),
+                    onEachFeature: (f, l) => onEachFeature(f, l, locs, maxVal)
+                }).addTo(map);
+                map.fitBounds(layer.getBounds().pad(0.2));
+                addLeafletLegend(map, 'map_ftf_dynamic', scale, locs, maxVal);
+            })
+            .catch(() => drawFallbackMap(map, topCountry, locs, maxVal, scale));
+    } else {
+        drawFallbackMap(map, topCountry, locs, maxVal, scale);
+    }
 }
+
 // =====================================================================
 // === GÉNÉRATEUR DE SCRIPT LUA PROJECT-GC =============================
 // =====================================================================
